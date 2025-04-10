@@ -209,6 +209,16 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     }
   }
 
+  calculateMeanBrightness(grayMat: any): number {
+    const mean = new cv.Mat();
+    const stddev = new cv.Mat();
+    cv.meanStdDev(grayMat, mean, stddev);
+    const brightness = mean.doubleAt(0, 0);
+    mean.delete();
+    stddev.delete();
+    return brightness;
+  }
+
   public async detectDocument() {
     if (!this.originalPhoto || !this.processingCanvas || !this.isOpenCvReady) {
       alert("Bild oder OpenCV.js nicht verfügbar.");
@@ -237,8 +247,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
         hierarchy: any, maxContour: any = null;
 
       const gaussianBlurKernelSize = new cv.Size(5, 5);
-      const cannyThreshold1 = 30;
-      const cannyThreshold2 = 130;
+
       const approxPolyEpsilonFactor = 0.02;
       const minContourAreaFactor = 0.1;
       const minAspectRatio = 0.5;
@@ -258,6 +267,10 @@ export class MediaPagePage implements OnInit, AfterViewInit {
         cv.equalizeHist(gray, gray);
         console.log("OpenCV: Gaussian Blur...");
         cv.GaussianBlur(gray, blurred, gaussianBlurKernelSize, 0);
+
+        const meanBrightness = this.calculateMeanBrightness(gray);
+        const cannyThreshold1 = Math.max(20, meanBrightness * 0.2);
+        const cannyThreshold2 = Math.max(130, meanBrightness * 0.6);
 
         console.log(`OpenCV: Canny Edges (T1=${cannyThreshold1}, T2=${cannyThreshold2})...`);
         cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
