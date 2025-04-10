@@ -386,9 +386,22 @@ export class MediaPagePage implements OnInit, AfterViewInit {
         validContours.delete();
 
         if (!foundContour) {
-          console.log("Keine passende Kontur nach Filterung gefunden.");
-          alert('Kein passendes Dokument gefunden. Bitte manuell anpassen.');
-          this.currentState = PageState.PhotoTaken;
+          console.log("No suitable contour found after filtering. Initializing default corners.");
+          const defaultCorners: DetectedCorners = {
+            topLeft: { x: 0, y: 0 },
+            topRight: { x: img.width, y: 0 },
+            bottomRight: { x: img.width, y: img.height },
+            bottomLeft: { x: 0, y: img.height }
+          };
+          this.detectedCorners = JSON.parse(JSON.stringify(defaultCorners));
+          this.adjustedCorners = JSON.parse(JSON.stringify(defaultCorners));
+
+          console.log("Setting state to ManualAdjust with default corners:", this.adjustedCorners);
+          this.currentState = PageState.ManualAdjust;
+
+          this.cdRef.detectChanges();
+          await new Promise(resolve => setTimeout(resolve, 50));
+          this.updateOverlaySize();
         } else {
           console.log("Erfolgreichste Kontur ausgewählt.");
           maxContour = foundContour;
@@ -640,7 +653,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     // Rest des Codes bleibt gleich
     const cornerKeys: (keyof DetectedCorners)[] = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'];
     ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
-    ctx.lineWidth = 2.5 / dpr;
+    ctx.lineWidth = 5 / dpr;
     ctx.beginPath();
     const p1 = {x: corners.topLeft.x * scaleX, y: corners.topLeft.y * scaleY};
     const p2 = {x: corners.topRight.x * scaleX, y: corners.topRight.y * scaleY};
@@ -660,7 +673,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     ctx.closePath();
     ctx.stroke();
 
-    const handleRadius = 9 / dpr;
+    const handleRadius = 15 / dpr;
     ctx.fillStyle = 'rgba(0, 255, 0, 0.9)';
     cornerKeys.forEach(key => {
       const point = corners[key];
