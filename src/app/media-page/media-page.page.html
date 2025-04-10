@@ -1,0 +1,94 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/" class="no-text-back-button"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Dokumenten Scan</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding" [fullscreen]="true">
+
+  <div #imageContainer class="image-container"
+       [class.adjusting]="currentState === PageState.ManualAdjust">
+
+    <div>
+    <img #photoDisplay *ngIf="capturedPhoto"
+         [src]="capturedPhoto" alt="Aufgenommenes Foto" id="photo"
+         (load)="updateOverlaySize()" /> <canvas #overlayCanvas class="overlay-canvas"
+                                                 *ngIf="currentState === PageState.ManualAdjust"
+                                                 (mousedown)="startDrag($event)"
+                                                 (touchstart)="startDrag($event)"
+                                                 (mousemove)="dragPoint($event)"
+                                                 (touchmove)="dragPoint($event)"
+                                                 (mouseup)="endDrag($event)"
+                                                 (touchend)="endDrag($event)"
+                                                 (mouseleave)="endDrag($event)"
+                                                 (touchcancel)="endDrag($event)"></canvas>
+    </div>
+    <div class="loading-indicator" *ngIf="currentState === PageState.Detecting">
+      <ion-spinner name="crescent"></ion-spinner>
+      <p>Erkenne Dokument...</p>
+    </div>
+  </div>
+
+  <!-- Debug-Bilder -->
+  <div class="debug-images" *ngIf=" debugContoursImage || debugMorphedEdgesImage || debugEdgesImage">
+    <div *ngIf="debugEdgesImage" class="debug-image-container">
+      <p>Kanten nach Morphologie</p>
+      <img [src]="debugEdgesImage" alt="Kanten nach Morphologie" class="debug-image" />
+    </div>
+    <div *ngIf="debugMorphedEdgesImage" class="debug-image-container">
+      <p>Kanten nach Morphologie</p>
+      <img [src]="debugMorphedEdgesImage" alt="Kanten nach Morphologie" class="debug-image" />
+    </div>
+    <div *ngIf="debugContoursImage" class="debug-image-container">
+      <p>Gefilterte Kontur (rot)</p>
+      <img [src]="debugContoursImage" alt="Gefilterte Kontur" class="debug-image" />
+    </div>
+  </div>
+
+  <canvas #processingCanvas hidden></canvas>
+
+  <div class="bottom-button" *ngIf="currentState === PageState.NoPhoto">
+    <ion-button expand="block" (click)="takePhoto()" shape="round" size="large" color="primary">
+      <ion-icon name="camera" slot="icon-only"></ion-icon>
+    </ion-button>
+  </div>
+
+  <div class="edit-toolbar" *ngIf="currentState === PageState.PhotoTaken || currentState === PageState.Cropped">
+    <ion-buttons>
+      <ion-button shape="round" (click)="onRotate()" [disabled]="currentState === PageState.Cropped" color="primary" fill="solid">
+        <ion-icon name="refresh" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-button shape="round" (click)="detectDocument()" [disabled]="!isOpenCvReady || currentState === PageState.Cropped" color="primary" fill="solid">
+        <ion-icon name="scan-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-button shape="round" (click)="onFilter()" color="primary" fill="solid">
+        <ion-icon name="color-filter-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-button shape="round" (click)="onSave()" color="success" fill="solid">
+        <ion-icon name="save-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-button shape="round" (click)="deletePhoto()" color="danger" fill="solid">
+        <ion-icon name="trash-bin-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </div>
+
+  <div class="edit-toolbar" *ngIf="currentState === PageState.ManualAdjust">
+    <ion-buttons>
+      <ion-button shape="round" (click)="cancelAdjust()" color="warning" fill="solid" title="Anpassung zurücksetzen">
+        <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-button shape="round" (click)="applyPerspectiveTransform()" color="success" fill="solid" title="Zuschneiden bestätigen">
+        <ion-icon name="checkmark-done-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+
+      <ion-button shape="round" (click)="deletePhoto()" color="danger" fill="solid">
+        <ion-icon name="trash-bin-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </div>
+
+</ion-content>

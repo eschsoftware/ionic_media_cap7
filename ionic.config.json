@@ -1,0 +1,7 @@
+{
+  "name": "media_utility",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular"
+}

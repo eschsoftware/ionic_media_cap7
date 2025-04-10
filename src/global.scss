@@ -1,0 +1,100 @@
+/*
+ * App Global CSS
+ * ----------------------------------------------------------------------------
+ * Put style rules here that you want to apply globally. These styles are for
+ * the entire app and not just one component. Additionally, this file can be
+ * used as an entry point to import other CSS/Sass files to be included in the
+ * output CSS.
+ * For more information on global stylesheets, visit the documentation:
+ * https://ionicframework.com/docs/layout/global-stylesheets
+ */
+
+/* Core CSS required for Ionic components to work properly */
+@import "@ionic/angular/css/core.css";
+
+/* Basic CSS for apps built with Ionic */
+@import "@ionic/angular/css/normalize.css";
+@import "@ionic/angular/css/structure.css";
+@import "@ionic/angular/css/typography.css";
+@import "@ionic/angular/css/display.css";
+
+/* Optional CSS utils that can be commented out */
+@import "@ionic/angular/css/padding.css";
+@import "@ionic/angular/css/float-elements.css";
+@import "@ionic/angular/css/text-alignment.css";
+@import "@ionic/angular/css/text-transformation.css";
+@import "@ionic/angular/css/flex-utils.css";
+
+/**
+ * Ionic Dark Mode
+ * -----------------------------------------------------
+ * For more info, please see:
+ * https://ionicframework.com/docs/theming/dark-mode
+ */
+
+/* @import "@ionic/angular/css/palettes/dark.always.css"; */
+/* @import "@ionic/angular/css/palettes/dark.class.css"; */
+@import "@ionic/angular/css/palettes/dark.system.css";
+
+
+.my-toast-class {
+    font-size: 1.5rem; /* Hier die gewünschte Schriftgröße angeben */
+    text-align: center; /* Text mittig ausrichten */
+    display: flex;
+    justify-content: center; /* Horizontale Ausrichtung */
+    align-items: center; /* Vertikale Ausrichtung */
+  }
+  
+  
+  .toast-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .close-button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    margin-left: 10px;
+    cursor: pointer;
+  }
+  
+
+  .full-screen-modal_old {
+    --height: 100%; /* Setze die Höhe auf 100% des Bildschirms */
+    --min-height: 100%; /* Minimumhöhe auf 100% */
+    --max-height: 100%; /* Maximale Höhe ebenfalls auf 100% */
+    --width: 100%; /* Modal über die volle Breite anzeigen */
+  }
+  .full-screen-modal {
+    --height: 100%; /* Setzt die Höhe des Modals auf 100% des Bildschirms */
+    --min-height: 100%; /* Minimumhöhe auf 100% */
+    --max-height: 100%; /* Maximale Höhe ebenfalls auf 100% */
+    --width: 100%; /* Modal soll die volle Breite einnehmen */
+    --border-radius: 0px; /* Entfernt die abgerundeten Ecken, um es wie eine vollständige Seite aussehen zu lassen */
+    --margin-top: 0px; /* Setzt den oberen Rand auf 0 */
+    --top: 0; /* Stellt sicher, dass das Modal von ganz oben anfängt */
+  }
+
+
+  
+  .fullscreen-modal {
+    --width: 100vw;
+    --height: 100vh;
+    --border-radius: 0;
+    --box-shadow: none;
+    inset: 0 !important;
+  }
+  
+  
+
+ion-modal.fullscreen-modal {
+  --width: 100vw !important;
+  --height: 100vh !important;
+  --border-radius: 0 !important;
+  --box-shadow: none !important;
+  inset: 0 !important;
+}
