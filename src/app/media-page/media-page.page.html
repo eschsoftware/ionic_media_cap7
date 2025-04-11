@@ -66,6 +66,9 @@
 
   <div class="edit-toolbar" *ngIf="currentState === PageState.PhotoTaken || currentState === PageState.Cropped">
     <ion-buttons>
+      <ion-button shape="round" (click)="resetFromPhoto()" color="warning" fill="solid" title="Anpassung zurücksetzen">
+        <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
+      </ion-button>
       <ion-button shape="round" (click)="onRotate()" [disabled]="currentState === PageState.Cropped" color="primary" fill="solid">
         <ion-icon name="refresh" slot="icon-only"></ion-icon>
       </ion-button>

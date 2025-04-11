@@ -141,6 +141,22 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     }
   }
 
+  async resetFromPhoto() {
+    console.log("resetFromPhoto aufgerufen");
+    this.capturedPhoto = this.originalPhoto;
+    this.rotationAngle = 0;
+    this.detectedCorners = null;
+    this.adjustedCorners = null;
+    this.currentState = PageState.NoPhoto;
+    this.clearOverlay();
+    this.draggingPoint = null;
+    this.imageRect = null;
+    this.isImageLoaded = false;
+    this.cdRef.detectChanges();
+
+    await this.detectDocument();
+  }
+
   private resetState() {
     console.log("resetState aufgerufen.");
     this.capturedPhoto = null;
@@ -173,6 +189,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       this.adjustedCorners = null;
       this.currentState = PageState.PhotoTaken;
       this.cdRef.detectChanges();
+      await this.detectDocument();
     } catch (error) {
       console.error("Fehler beim Aufnehmen des Fotos:", error);
       if (error instanceof Error && error.message.toLowerCase().includes('cancelled')) {
@@ -781,7 +798,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
 
       const meanBrightness = cv.mean(gray)[0];
       const cannyThreshold1 = Math.max(30, meanBrightness * 0.3);
-      const cannyThreshold2 = Math.max(100, meanBrightness * 0.6);
+      const cannyThreshold2 = Math.max(117, meanBrightness * 0.6);
       cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
       const kernelSize = 3;
       let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
@@ -1302,7 +1319,8 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     }
   }
 
-  public cancelAdjust() {
+  public async cancelAdjust() {
+    await this.detectDocument();
     if (this.detectedCorners) {
       this.adjustedCorners = JSON.parse(JSON.stringify(this.detectedCorners));
       this.currentState = PageState.ManualAdjust;
