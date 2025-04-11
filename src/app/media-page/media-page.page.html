@@ -33,7 +33,15 @@
   </div>
 
   <!-- Debug-Bilder -->
-  <div class="debug-images" *ngIf=" debugContoursImage || debugMorphedEdgesImage || debugEdgesImage">
+  <div class="debug-images" *ngIf="debugAdaptiveThresholdImage || debugMorphedImage || debugContoursImage || debugMorphedEdgesImage || debugEdgesImage">
+    <div *ngIf="debugAdaptiveThresholdImage" class="debug-image-container">
+      <p>Kanten nach Morphologie</p>
+      <img [src]="debugAdaptiveThresholdImage" alt="Kanten nach Morphologie" class="debug-image" />
+    </div>
+    <div *ngIf="debugMorphedImage" class="debug-image-container">
+      <p>Kanten nach Morphologie</p>
+      <img [src]="debugMorphedImage" alt="Kanten nach Morphologie" class="debug-image" />
+    </div>
     <div *ngIf="debugEdgesImage" class="debug-image-container">
       <p>Kanten nach Morphologie</p>
       <img [src]="debugEdgesImage" alt="Kanten nach Morphologie" class="debug-image" />

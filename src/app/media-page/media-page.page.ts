@@ -34,6 +34,22 @@ enum PageState {
   Cropped
 }
 
+interface DetectionResult {
+  corners: DetectedCorners | null;
+  confidence: number;
+}
+
+interface LineSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  angle: number;
+  length: number;
+  midX: number;
+  midY: number;
+}
+
 @Component({
   selector: 'app-media-page',
   templateUrl: './media-page.page.html',
@@ -58,6 +74,8 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   public debugEdgesImage: string | null = null;
   public debugMorphedEdgesImage: string | null = null;
   public debugContoursImage: string | null = null;
+  public debugAdaptiveThresholdImage: string | null = null;
+  public debugMorphedImage: string | null = null;
 
   @ViewChild('imageContainer') imageContainerRef!: ElementRef<HTMLDivElement>;
   @ViewChild('photoDisplay') photoDisplayRef!: ElementRef<HTMLImageElement>;
@@ -219,6 +237,715 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     return brightness;
   }
 
+  isContourAtEdge(contour: any, canvasWidth: any, canvasHeight: any) {
+    const margin = Math.max(5, canvasWidth * 0.02);
+    for (let i = 0; i < contour.rows; i++) {
+      const pt = {
+        x: contour.intPtr(i, 0)[0],
+        y: contour.intPtr(i, 0)[1]
+      };
+      if (pt.x < margin || pt.x > canvasWidth - margin ||
+        pt.y < margin || pt.y > canvasHeight - margin) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async standardDocumentDetection(img: HTMLImageElement, canvas: HTMLCanvasElement): Promise<DetectionResult> {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Kein 2D-Kontext verfügbar.");
+    ctx.drawImage(img, 0, 0);
+
+    let src, gray, blurred, edges, contours, hierarchy, maxContour = null;
+    try {
+      src = cv.imread(canvas);
+      gray = new cv.Mat();
+      blurred = new cv.Mat();
+      edges = new cv.Mat();
+      contours = new cv.MatVector();
+      hierarchy = new cv.Mat();
+
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      cv.equalizeHist(gray, gray);
+      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+
+      const meanBrightness = this.calculateMeanBrightness(gray);
+      const cannyThreshold1 = Math.max(20, meanBrightness * 0.2);
+      const cannyThreshold2 = Math.max(130, meanBrightness * 0.6);
+      cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
+
+      let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+      let dilated = new cv.Mat();
+      cv.dilate(edges, dilated, kernel, new cv.Point(-1, -1), 2);
+      cv.erode(dilated, edges, kernel, new cv.Point(-1, -1), 1);
+      kernel.delete();
+      dilated.delete();
+
+      cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+      const minArea = img.width * img.height * 0.1;
+      const minAspectRatio = 0.5;
+      const maxAspectRatio = 2.5;
+
+      let maxArea = 0;
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const area = cv.contourArea(contour);
+        if (area < minArea) continue;
+
+        const peri = cv.arcLength(contour, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(contour, approx, 0.02 * peri, true);
+
+        if (approx.rows === 4 && cv.isContourConvex(approx)) {
+          const rect = cv.boundingRect(approx);
+          if (rect.height === 0) {
+            approx.delete();
+            continue;
+          }
+          const aspectRatio = rect.width / rect.height;
+          const isValidAspectRatio =
+            (aspectRatio >= minAspectRatio && aspectRatio <= maxAspectRatio) ||
+            (1 / aspectRatio >= minAspectRatio && 1 / aspectRatio <= maxAspectRatio);
+          if (isValidAspectRatio && area > maxArea) {
+            maxArea = area;
+            if (maxContour) maxContour.delete();
+            maxContour = approx.clone();
+          }
+        }
+        approx.delete();
+      }
+
+      if (!maxContour) {
+        return {corners: null, confidence: 0};
+      }
+
+      const pts: { x: number; y: number }[] = [];
+      for (let i = 0; i < 4; i++) {
+        pts.push({
+          x: maxContour.intPtr(i, 0)[0],
+          y: maxContour.intPtr(i, 0)[1]
+        });
+      }
+      pts.sort((a, b) => a.y - b.y);
+      const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+      const bottom = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+      const corners: DetectedCorners = {
+        topLeft: top[0],
+        topRight: top[1],
+        bottomRight: bottom[1],
+        bottomLeft: bottom[0],
+      };
+      const confidence = maxArea / (img.width * img.height);
+      return {corners, confidence};
+    } finally {
+      [src, gray, blurred, edges, hierarchy, maxContour]
+        .filter(m => m && typeof m.delete === 'function' && !m.isDeleted())
+        .forEach(m => m.delete());
+      if (contours && !contours.isDeleted()) contours.delete();
+    }
+  }
+
+  private matToDataUrl(mat: any): string {
+    const tempCanvas = document.createElement("canvas");
+    cv.imshow(tempCanvas, mat); // Use cv.imshow to draw mat onto canvas
+    return tempCanvas.toDataURL("image/png");
+  }
+
+  private async receiptDetection(
+    img: HTMLImageElement,
+    canvas: HTMLCanvasElement
+  ): Promise<DetectionResult> {
+    const ctx = canvas.getContext("2d", {willReadFrequently: true});
+    if (!ctx) throw new Error("Could not get 2D context.");
+
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    let src = cv.imread(canvas);
+    let gray = new cv.Mat();
+    let blurred = new cv.Mat();
+    let thresh = new cv.Mat();
+    let morphed = new cv.Mat();
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    let debugContoursMat = src.clone();
+
+    try {
+
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
+
+      const blockSize = 15;
+      const C = 7;
+      cv.adaptiveThreshold(
+        blurred,
+        thresh,
+        255,
+        cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv.THRESH_BINARY_INV,
+        blockSize,
+        C
+      );
+      this.debugAdaptiveThresholdImage = this.matToDataUrl(thresh);
+
+      const kernelSize = 3;
+      const iterations = 3;
+      let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
+      cv.dilate(thresh, morphed, kernel, new cv.Point(-1, -1), iterations);
+      cv.erode(morphed, morphed, kernel, new cv.Point(-1, -1), iterations);
+      kernel.delete();
+      this.debugMorphedImage = this.matToDataUrl(morphed);
+
+      cv.findContours(
+        morphed,
+        contours,
+        hierarchy,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE
+      );
+
+      const minArea = canvas.width * canvas.height * 0.03;
+      const maxAreaThreshold = canvas.width * canvas.height * 0.95;
+      const minAspectRatio = 0.05;
+      const maxAspectRatio = 20;
+
+      let bestRect: any;
+      let maxFoundArea = 0;
+
+      const contourColor = new cv.Scalar(0, 255, 0, 255);
+      const potentialColor = new cv.Scalar(0, 0, 255, 255);
+
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const area = cv.contourArea(contour);
+
+        if (area < minArea || area > maxAreaThreshold) {
+          contour.delete();
+          continue;
+        }
+
+        const rotatedRect = cv.minAreaRect(contour);
+        const points = cv.RotatedRect.points(rotatedRect);
+        const boundingArea = rotatedRect.size.width * rotatedRect.size.height;
+
+        if (rotatedRect.size.height === 0 || rotatedRect.size.width === 0) {
+          contour.delete();
+          continue;
+        }
+
+        const aspectRatio = Math.max(rotatedRect.size.width / rotatedRect.size.height, rotatedRect.size.height / rotatedRect.size.width);
+
+        if (aspectRatio >= minAspectRatio && aspectRatio <= maxAspectRatio) {
+
+          for (let j = 0; j < 4; j++) {
+            cv.line(debugContoursMat, points[j], points[(j + 1) % 4], potentialColor, 2);
+          }
+
+          if (boundingArea > maxFoundArea) {
+            maxFoundArea = boundingArea;
+            bestRect = rotatedRect;
+          }
+        }
+        contour.delete();
+      }
+
+      if (bestRect) {
+        const points = cv.RotatedRect.points(bestRect);
+        for (let j = 0; j < 4; j++) {
+          cv.line(debugContoursMat, points[j], points[(j + 1) % 4], contourColor, 3);
+        }
+      }
+      this.debugContoursImage = this.matToDataUrl(debugContoursMat);
+
+      if (!bestRect) {
+        console.log("Receipt Detection: No suitable minAreaRect found.");
+        return {corners: null, confidence: 0};
+      }
+
+      const boxPoints = cv.RotatedRect.points(bestRect);
+      let pts: Point[] = boxPoints.map((p: any) => ({x: p.x, y: p.y}));
+
+      pts.sort((a, b) => a.y - b.y);
+      const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+      const bottom = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+
+      const corners: DetectedCorners = {
+        topLeft: top[0],
+        topRight: top[1],
+        bottomRight: bottom[1],
+        bottomLeft: bottom[0],
+      };
+
+      const confidence = maxFoundArea / (canvas.width * canvas.height);
+
+      console.log(`Receipt Detection: Found minAreaRect with area ${maxFoundArea.toFixed(0)}, Confidence: ${confidence.toFixed(3)}`);
+      return {corners, confidence};
+
+    } catch (error) {
+      console.error("Error during receipt detection:", error);
+      this.debugAdaptiveThresholdImage = null;
+      this.debugMorphedImage = null;
+      this.debugContoursImage = null;
+      return {corners: null, confidence: 0};
+    } finally {
+      [
+        src, gray, blurred, thresh, morphed, hierarchy, debugContoursMat
+      ]
+        .filter(m => m && !m.isDeleted())
+        .forEach(m => m.delete());
+      if (contours && !contours.isDeleted()) contours.delete();
+      console.log("Receipt Detection: OpenCV Mats cleaned up.");
+    }
+  }
+
+  public async receiptDetectionV3(
+    img: HTMLImageElement,
+    canvas: HTMLCanvasElement
+  ): Promise<DetectionResult> {
+    console.log("Starting Receipt Detection V3");
+    const ctx = canvas.getContext("2d", {willReadFrequently: true});
+    if (!ctx) throw new Error("Could not get 2D context.");
+
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    let src = cv.imread(canvas);
+    let gray = new cv.Mat();
+    let blurred = new cv.Mat();
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    let debugContoursMat = src.clone();
+
+    let edges = new cv.Mat();
+    let morphedEdges = new cv.Mat();
+    let largestContour = new cv.Mat();
+    let bestQuadApprox = new cv.Mat();
+
+    try {
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+      let normalizedGray = new cv.Mat();
+      cv.normalize(gray, normalizedGray, 0, 255, cv.NORM_MINMAX, -1);
+
+      cv.GaussianBlur(normalizedGray, blurred, new cv.Size(5, 5), 0);
+
+      const meanBrightness = this.calculateMeanBrightness(normalizedGray);
+      const cannyThreshold1 = Math.max(30, meanBrightness * 0.25);
+      const cannyThreshold2 = Math.max(150, meanBrightness * 0.7);
+      cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
+      // --- Debug: Save Canny edges ---
+      this.debugEdgesImage = this.matToDataUrl(edges);
+
+      const kernelSize = 3;
+      let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
+      cv.dilate(edges, morphedEdges, kernel, new cv.Point(-1, -1), 2); // Dilate more
+      cv.erode(morphedEdges, morphedEdges, kernel, new cv.Point(-1, -1), 1); // Erode less
+      kernel.delete();
+
+      this.debugMorphedEdgesImage = this.matToDataUrl(morphedEdges);
+
+      cv.findContours(
+        morphedEdges,
+        contours,
+        hierarchy,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_SIMPLE
+      );
+
+      const minArea = canvas.width * canvas.height * 0.03;
+      const maxAreaThreshold = canvas.width * canvas.height * 0.95;
+      const minAspectRatio = 0.05;
+      const maxAspectRatio = 20;
+
+      let maxAreaFound = 0;
+      let maxQuadAreaFound = 0;
+
+      const quadColor = new cv.Scalar(255, 0, 0, 255);
+      const finalQuadColor = new cv.Scalar(0, 255, 0, 255);
+      const fallbackRectColor = new cv.Scalar(0, 255, 255, 255);
+
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const area = cv.contourArea(contour);
+
+        if (area < minArea || area > maxAreaThreshold) {
+          contour.delete();
+          continue;
+        }
+
+        if (area > maxAreaFound) {
+          maxAreaFound = area;
+          if (largestContour) largestContour.delete();
+          largestContour = contour.clone();
+        }
+
+        const peri = cv.arcLength(contour, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(contour, approx, 0.02 * peri, true);
+
+        if (approx.rows === 4 && cv.isContourConvex(approx)) {
+          const rect = cv.boundingRect(approx);
+
+          if (rect.height > 0 && rect.width > 0) {
+            const currentAspectRatio = rect.width / rect.height;
+            const isValidAspectRatio =
+              (currentAspectRatio >= minAspectRatio && currentAspectRatio <= maxAspectRatio) ||
+              (1 / currentAspectRatio >= minAspectRatio && 1 / currentAspectRatio <= maxAspectRatio);
+
+            if (isValidAspectRatio) {
+              let pointsVec = new cv.MatVector();
+              pointsVec.push_back(approx);
+              cv.drawContours(debugContoursMat, pointsVec, 0, quadColor, 2);
+              pointsVec.delete();
+
+              if (area > maxQuadAreaFound) {
+                maxQuadAreaFound = area;
+                if (bestQuadApprox) bestQuadApprox.delete();
+                bestQuadApprox = approx.clone();
+              }
+            }
+          }
+        }
+        approx.delete();
+        contour.delete();
+      }
+
+      let resultCorners: DetectedCorners | null = null;
+      let resultConfidence: number = 0;
+      let detectionMethod: string = "None";
+
+      if (bestQuadApprox) {
+        detectionMethod = "Quadrilateral Approximation";
+        const pts: Point[] = [];
+        for (let i = 0; i < bestQuadApprox.rows; i++) {
+          pts.push({
+            x: bestQuadApprox.data32S[i * 2],
+            y: bestQuadApprox.data32S[i * 2 + 1]
+          });
+        }
+        // Sort corners
+        pts.sort((a, b) => a.y - b.y);
+        const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+        const bottom = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+        resultCorners = {
+          topLeft: top[0], topRight: top[1],
+          bottomRight: bottom[1], bottomLeft: bottom[0],
+        };
+        resultConfidence = maxQuadAreaFound / (canvas.width * canvas.height); // Use area of the contour that led to this approx
+
+        let pointsVec = new cv.MatVector();
+        pointsVec.push_back(bestQuadApprox);
+        cv.drawContours(debugContoursMat, pointsVec, 0, finalQuadColor, 3);
+        pointsVec.delete();
+
+      } else if (largestContour) {
+        detectionMethod = "MinAreaRect Fallback";
+        const rotatedRect = cv.minAreaRect(largestContour);
+        const boundingArea = rotatedRect.size.width * rotatedRect.size.height;
+
+        if (rotatedRect.size.height > 0 && rotatedRect.size.width > 0) {
+          const fallbackAspectRatio = Math.max(rotatedRect.size.width / rotatedRect.size.height, rotatedRect.size.height / rotatedRect.size.width);
+          if (fallbackAspectRatio >= minAspectRatio && fallbackAspectRatio <= maxAspectRatio) {
+            const boxPoints = cv.RotatedRect.points(rotatedRect);
+            let pts: Point[] = boxPoints.map((p: any) => ({x: p.x, y: p.y}));
+            pts.sort((a, b) => a.y - b.y);
+            const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+            const bottom = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+            resultCorners = {
+              topLeft: top[0], topRight: top[1],
+              bottomRight: bottom[1], bottomLeft: bottom[0],
+            };
+            resultConfidence = boundingArea / (canvas.width * canvas.height);
+
+            for (let j = 0; j < 4; j++) {
+              cv.line(debugContoursMat, boxPoints[j], boxPoints[(j + 1) % 4], fallbackRectColor, 3);
+            }
+          } else {
+            console.log("Receipt Detection V3: Fallback rect failed aspect ratio check.");
+          }
+        } else {
+          console.log("Receipt Detection V3: Fallback rect has zero dimension.");
+        }
+      } else {
+        console.log("Receipt Detection V3: No suitable contour found.");
+      }
+
+      this.debugContoursImage = this.matToDataUrl(debugContoursMat);
+
+      console.log(`Receipt Detection V3: Method='${detectionMethod}', Confidence=${resultConfidence.toFixed(3)}`);
+      return {corners: resultCorners, confidence: resultConfidence};
+
+    } catch (error) {
+      console.error("Error during receipt detection V3:", error);
+      this.debugEdgesImage = null;
+      this.debugMorphedEdgesImage = null;
+      this.debugContoursImage = null;
+      return {corners: null, confidence: 0};
+    } finally {
+      [
+        src, gray, blurred, edges, morphedEdges, hierarchy,
+        debugContoursMat, largestContour, bestQuadApprox
+      ]
+        .filter(m => m && !m.isDeleted())
+        .forEach(m => m.delete());
+      if (contours && !contours.isDeleted()) contours.delete();
+      console.log("Receipt Detection V3: OpenCV Mats cleaned up.");
+    }
+  }
+
+  findIntersection(line1: LineSegment, line2: LineSegment): Point | null {
+    const {x1: x1, y1: y1, x2: x2, y2: y2} = line1;
+    const {x1: x3, y1: y3, x2: x4, y2: y4} = line2;
+
+    const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+    if (Math.abs(den) < 1e-6) {
+      return null;
+    }
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+
+    const intersectX = x1 + t * (x2 - x1);
+    const intersectY = y1 + t * (y2 - y1);
+
+    return {x: intersectX, y: intersectY};
+  }
+
+  calculateLineProperties(x1: number, y1: number, x2: number, y2: number): {
+    angle: number,
+    length: number,
+    midX: number,
+    midY: number
+  } {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+
+    return {angle, length, midX, midY};
+  }
+
+  sortCorners(pts: Point[]): DetectedCorners | null {
+    if (pts.length !== 4) return null;
+
+    pts.sort((a, b) => a.y - b.y);
+
+    const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+    const bottom = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+
+    return {
+      topLeft: top[0],
+      topRight: top[1],
+      bottomRight: bottom[1],
+      bottomLeft: bottom[0],
+    };
+  }
+
+  async detectionWithHough(
+    img: HTMLImageElement,
+    canvas: HTMLCanvasElement
+  ): Promise<DetectionResult> {
+    console.log("Starting Receipt Detection with HoughLinesP");
+    const ctx = canvas.getContext("2d", {willReadFrequently: true});
+    if (!ctx) throw new Error("Could not get 2D context.");
+
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    let src = cv.imread(canvas);
+    let gray = new cv.Mat();
+    let blurred = new cv.Mat();
+    let edges = new cv.Mat();
+    let morphedEdges = new cv.Mat();
+    let lines = new cv.Mat();
+    let debugLinesMat = src.clone();
+
+    try {
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      let normalizedGray = new cv.Mat();
+      cv.normalize(gray, normalizedGray, 0, 255, cv.NORM_MINMAX, cv.CV_8U);
+      cv.GaussianBlur(normalizedGray, blurred, new cv.Size(5, 5), 0);
+      normalizedGray.delete();
+
+      const meanBrightness = cv.mean(gray)[0];
+      const cannyThreshold1 = Math.max(30, meanBrightness * 0.3);
+      const cannyThreshold2 = Math.max(100, meanBrightness * 0.6);
+      cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
+      const kernelSize = 3;
+      let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
+      cv.dilate(edges, morphedEdges, kernel, new cv.Point(-1, -1), 2);
+      cv.erode(morphedEdges, morphedEdges, kernel, new cv.Point(-1, -1), 1);
+      kernel.delete();
+
+      const rho = 1;
+      const theta = Math.PI / 180;
+      const threshold = 50;
+      const minLineLength = Math.min(canvas.width, canvas.height) * 0.1;
+      const maxLineGap = 20;
+
+      cv.HoughLinesP(
+        morphedEdges,
+        lines,
+        rho,
+        theta,
+        threshold,
+        minLineLength,
+        maxLineGap
+      );
+
+      console.log(`HoughLinesP detected ${lines.rows} lines initially.`);
+
+      const detectedLines: LineSegment[] = [];
+      const horizontalLines: LineSegment[] = [];
+      const verticalLines: LineSegment[] = [];
+      const angleTolerance = 15;
+
+      for (let i = 0; i < lines.rows; ++i) {
+        const startPointX = lines.data32S[i * 4];
+        const startPointY = lines.data32S[i * 4 + 1];
+        const endPointX = lines.data32S[i * 4 + 2];
+        const endPointY = lines.data32S[i * 4 + 3];
+
+        const props = this.calculateLineProperties(startPointX, startPointY, endPointX, endPointY);
+
+        if (props.length < minLineLength / 2) continue;
+
+        const line: LineSegment = {
+          x1: startPointX,
+          y1: startPointY,
+          x2: endPointX,
+          y2: endPointY,
+          angle: props.angle,
+          length: props.length,
+          midX: props.midX,
+          midY: props.midY
+        };
+        detectedLines.push(line);
+
+        if (Math.abs(props.angle) < angleTolerance) {
+          horizontalLines.push(line);
+        } else if (Math.abs(Math.abs(props.angle) - 90) < angleTolerance) {
+          verticalLines.push(line);
+        }
+
+        const start = new cv.Point(startPointX, startPointY);
+        const end = new cv.Point(endPointX, endPointY);
+        cv.line(debugLinesMat, start, end, new cv.Scalar(0, 0, 255, 255), 1); // Draw all lines in red
+
+      }
+
+      console.log(`Found ${horizontalLines.length} horizontal-ish lines and ${verticalLines.length} vertical-ish lines.`);
+
+      let resultCorners: DetectedCorners | null = null;
+      let resultConfidence: number = 0;
+      let detectionMethod: string = "None";
+
+      if (horizontalLines.length >= 2 && verticalLines.length >= 2) {
+        detectionMethod = "Hough Lines Intersection";
+
+        horizontalLines.sort((a, b) => a.midY - b.midY); // Sort by vertical position (top to bottom)
+        verticalLines.sort((a, b) => a.midX - b.midX);   // Sort by horizontal position (left to right)
+
+        const topH = horizontalLines[0];
+        const bottomH = horizontalLines[horizontalLines.length - 1];
+        const leftV = verticalLines[0];
+        const rightV = verticalLines[verticalLines.length - 1];
+
+        cv.line(debugLinesMat, new cv.Point(topH.x1, topH.y1), new cv.Point(topH.x2, topH.y2), new cv.Scalar(0, 255, 0, 255), 3); // Green
+        cv.line(debugLinesMat, new cv.Point(bottomH.x1, bottomH.y1), new cv.Point(bottomH.x2, bottomH.y2), new cv.Scalar(0, 255, 0, 255), 3); // Green
+        cv.line(debugLinesMat, new cv.Point(leftV.x1, leftV.y1), new cv.Point(leftV.x2, leftV.y2), new cv.Scalar(255, 0, 0, 255), 3); // Blue
+        cv.line(debugLinesMat, new cv.Point(rightV.x1, rightV.y1), new cv.Point(rightV.x2, rightV.y2), new cv.Scalar(255, 0, 0, 255), 3); // Blue
+
+        const topLeft = this.findIntersection(topH, leftV);
+        const topRight = this.findIntersection(topH, rightV);
+        const bottomLeft = this.findIntersection(bottomH, leftV);
+        const bottomRight = this.findIntersection(bottomH, rightV);
+
+        if (topLeft && topRight && bottomLeft && bottomRight) {
+          const corners: Point[] = [topLeft, topRight, bottomRight, bottomLeft];
+
+          resultCorners = this.sortCorners(corners);
+
+          if (resultCorners) {
+            const {
+              topLeft: tl,
+              topRight: tr,
+              bottomRight: br,
+              bottomLeft: bl
+            } = resultCorners;
+            const area = 0.5 * Math.abs(
+              tl.x * tr.y + tr.x * br.y + br.x * bl.y + bl.x * tl.y -
+              (tl.y * tr.x + tr.y * br.x + br.y * bl.x + bl.y * tl.x)
+            );
+            resultConfidence = area / (canvas.width * canvas.height);
+
+            const finalColor = new cv.Scalar(0, 255, 255, 255); // Yellow
+            cv.circle(debugLinesMat, new cv.Point(tl.x, tl.y), 5, finalColor, -1);
+            cv.circle(debugLinesMat, new cv.Point(tr.x, tr.y), 5, finalColor, -1);
+            cv.circle(debugLinesMat, new cv.Point(br.x, br.y), 5, finalColor, -1);
+            cv.circle(debugLinesMat, new cv.Point(bl.x, bl.y), 5, finalColor, -1);
+            cv.line(debugLinesMat, new cv.Point(tl.x, tl.y), new cv.Point(tr.x, tr.y), finalColor, 2);
+            cv.line(debugLinesMat, new cv.Point(tr.x, tr.y), new cv.Point(br.x, br.y), finalColor, 2);
+            cv.line(debugLinesMat, new cv.Point(br.x, br.y), new cv.Point(bl.x, bl.y), finalColor, 2);
+            cv.line(debugLinesMat, new cv.Point(bl.x, bl.y), new cv.Point(tl.x, tl.y), finalColor, 2);
+            // ---------------------------------
+          } else {
+            console.warn("Hough Detection: Could not sort the 4 intersection points.");
+            detectionMethod = "Hough Lines Intersection (Sort Failed)";
+          }
+
+        } else {
+          console.warn("Hough Detection: Could not find all 4 intersection points.");
+          detectionMethod = "Hough Lines Intersection (Incomplete)";
+        }
+      } else {
+        console.log("Hough Detection: Not enough horizontal or vertical lines found.");
+      }
+
+      console.log(`Receipt Detection (Hough): Method='${detectionMethod}', Confidence=${resultConfidence.toFixed(3)}`);
+      return {corners: resultCorners, confidence: resultConfidence};
+
+    } catch (error) {
+      console.error("Error during receipt detection (Hough):", error);
+      return {corners: null, confidence: 0}; // Return default on error
+    } finally {
+      [
+        src, gray, blurred, edges, morphedEdges, lines, debugLinesMat
+      ]
+        .filter(m => m && !m.isDeleted())
+        .forEach(m => m.delete());
+      console.log("Receipt Detection (Hough): OpenCV Mats cleaned up.");
+    }
+  }
+
+  private async tryMultipleDetectionMethods(img: HTMLImageElement, canvas: HTMLCanvasElement): Promise<DetectionResult> {
+    const results = await Promise.all([
+      //this.standardDocumentDetection(img, canvas), // standard algo den wir zu beginn hatten
+      //this.receiptDetection(img, canvas),
+      //this.receiptDetectionV3(img, canvas), // erkennt gut wo die dokumente sind, aber der rahmen ist zu klein
+      this.detectionWithHough(img, canvas),
+    ]);
+
+    const bestResult = results.reduce((best, current) =>
+        current.confidence > best.confidence ? current : best,
+      {corners: null, confidence: 0} as DetectionResult
+    );
+
+    return bestResult;
+  }
+
   public async detectDocument() {
     if (!this.originalPhoto || !this.processingCanvas || !this.isOpenCvReady) {
       alert("Bild oder OpenCV.js nicht verfügbar.");
@@ -239,241 +966,32 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       const img = await this.loadImage(this.originalPhoto);
       canvas.width = img.width;
       canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Kein 2D-Kontext verfügbar.");
-      ctx.drawImage(img, 0, 0);
 
-      let src: any, gray: any, blurred: any, edges: any, contours: any,
-        hierarchy: any, maxContour: any = null;
+      const result = await this.tryMultipleDetectionMethods(img, canvas);
 
-      const gaussianBlurKernelSize = new cv.Size(5, 5);
-
-      const approxPolyEpsilonFactor = 0.02;
-      const minContourAreaFactor = 0.1;
-      const minAspectRatio = 0.5;
-      const maxAspectRatio = 2.5;
-
-      try {
-        console.log("OpenCV: Lese Bild...");
-        src = cv.imread(canvas);
-        gray = new cv.Mat();
-        blurred = new cv.Mat();
-        edges = new cv.Mat();
-        contours = new cv.MatVector();
-        hierarchy = new cv.Mat();
-
-        console.log("OpenCV: Graustufen...");
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        cv.equalizeHist(gray, gray);
-        console.log("OpenCV: Gaussian Blur...");
-        cv.GaussianBlur(gray, blurred, gaussianBlurKernelSize, 0);
-
-        const meanBrightness = this.calculateMeanBrightness(gray);
-        const cannyThreshold1 = Math.max(20, meanBrightness * 0.2);
-        const cannyThreshold2 = Math.max(130, meanBrightness * 0.6);
-
-        console.log(`OpenCV: Canny Edges (T1=${cannyThreshold1}, T2=${cannyThreshold2})...`);
-        cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
-
-        // Morphologische Operation: Kantenlücken schließen
-        console.log("OpenCV: Morphologische Operation (Dilation)...");
-        let dilated = new cv.Mat();
-        let kernel = cv.Mat.ones(3, 3, cv.CV_8U); // 3x3 Kernel
-        cv.dilate(edges, dilated, kernel, new cv.Point(-1, -1), 2); // 2 Iterationen
-        console.log("OpenCV: Morphologische Operation (Erosion)...");
-        cv.erode(dilated, edges, kernel, new cv.Point(-1, -1), 1); // 1 Iteration
-        kernel.delete();
-        dilated.delete();
-        console.log("OpenCV: Konturensuche (auf Canny Edges, RETR_EXTERNAL)...");
-        cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-        // Debug: Kantenbild speichern
-        const edgesCanvas = document.createElement('canvas');
-        edgesCanvas.width = canvas.width;
-        edgesCanvas.height = canvas.height;
-        cv.imshow(edgesCanvas, edges);
-        this.debugEdgesImage = edgesCanvas.toDataURL('image/jpeg', 0.8);
-        console.log("Canny-Kanten gespeichert:", this.debugEdgesImage.substring(0, 50) + "...");
-
-        // Debug: Kantenbild nach Morphologie speichern
-        const morphedEdgesCanvas = document.createElement('canvas');
-        morphedEdgesCanvas.width = canvas.width;
-        morphedEdgesCanvas.height = canvas.height;
-        cv.imshow(morphedEdgesCanvas, edges);
-        this.debugMorphedEdgesImage = morphedEdgesCanvas.toDataURL('image/jpeg', 0.8);
-        console.log("Kanten nach Morphologie gespeichert:", this.debugMorphedEdgesImage.substring(0, 50) + "...");
-
-        // Debug: Alle Konturen zeichnen
-        let contourImg = src.clone();
-        cv.drawContours(contourImg, contours, -1, new cv.Scalar(0, 255, 0, 255), 2);
-        const contourCanvas = document.createElement('canvas');
-        contourCanvas.width = canvas.width;
-        contourCanvas.height = canvas.height;
-        cv.imshow(contourCanvas, contourImg);
-        this.debugContoursImage = contourCanvas.toDataURL('image/jpeg', 0.8);
-        console.log("Alle Konturen gespeichert:", this.debugContoursImage.substring(0, 50) + "...");
-        contourImg.delete();
-
-        // Konturen nach Fläche sortieren
-        const contourAreas: { index: number; area: number }[] = [];
-        for (let i = 0; i < contours.size(); i++) {
-          const area = cv.contourArea(contours.get(i));
-          contourAreas.push({index: i, area});
-        }
-        contourAreas.sort((a, b) => b.area - a.area);
-        console.log(`Konturen gefunden: ${contours.size()}. Sortierte Flächen:`, contourAreas.map(c => c.area.toFixed(0)));
-
-        // Sammle gültige Konturen für Debug-Bild
-        let validContours = new cv.MatVector();
-        let maxArea = 0;
-        let foundContour: any = null;
-        const minArea = img.width * img.height * minContourAreaFactor;
-        console.log(`Filterung (minArea=${minArea.toFixed(0)})...`);
-
-        for (const {index} of contourAreas) {
-          const contour = contours.get(index);
-          const area = cv.contourArea(contour);
-          console.log(`Kontur ${index}: Fläche=${area.toFixed(0)} (minArea=${minArea.toFixed(0)})`);
-
-          if (area < minArea) {
-            console.log(` - Abgelehnt: Fläche zu klein`);
-            continue;
-          }
-
-          const peri = cv.arcLength(contour, true);
-          const approx = new cv.Mat();
-          cv.approxPolyDP(contour, approx, approxPolyEpsilonFactor * peri, true);
-          console.log(` - Ecken nach approxPolyDP: ${approx.rows}`);
-
-          if (approx.rows !== 4) {
-            console.log(` - Abgelehnt: Kein Viereck (${approx.rows} Ecken)`);
-            approx.delete();
-            continue;
-          }
-
-          if (!cv.isContourConvex(approx)) {
-            console.log(` - Abgelehnt: Nicht konvex`);
-            approx.delete();
-            continue;
-          }
-
-          const rect = cv.boundingRect(approx);
-          if (rect.height === 0) {
-            console.log(` - Abgelehnt: Ungültiges Rechteck (Höhe=0)`);
-            approx.delete();
-            continue;
-          }
-
-          const aspectRatio = rect.width / rect.height;
-          const isValidAspectRatio =
-            (aspectRatio >= minAspectRatio && aspectRatio <= maxAspectRatio) ||
-            (1 / aspectRatio >= minAspectRatio && 1 / aspectRatio <= maxAspectRatio);
-          console.log(` - Aspektverhältnis: ${aspectRatio.toFixed(2)} (gültig: ${minAspectRatio}-${maxAspectRatio})`);
-
-          if (!isValidAspectRatio) {
-            console.log(` - Abgelehnt: Ungültiges Aspektverhältnis`);
-            approx.delete();
-            continue;
-          }
-
-          console.log(` - Gültige Kontur! Fläche=${area.toFixed(0)}, AR=${aspectRatio.toFixed(2)}`);
-          validContours.push_back(approx.clone()); // Für Debug-Bild
-          if (area > maxArea) {
-            maxArea = area;
-            if (foundContour) foundContour.delete();
-            foundContour = approx.clone();
-          }
-          approx.delete();
-        }
-
-        // Debug: Gültige Konturen zeichnen
-        let validContourImg = src.clone();
-        cv.drawContours(validContourImg, validContours, -1, new cv.Scalar(255, 0, 0, 255), 3);
-        const validContourCanvas = document.createElement('canvas');
-        validContourCanvas.width = canvas.width;
-        validContourCanvas.height = canvas.height;
-        cv.imshow(validContourCanvas, validContourImg);
-        this.debugContoursImage = validContourCanvas.toDataURL('image/jpeg', 0.8); // Überschreibt mit gültigen Konturen
-        console.log("Gültige Konturen gespeichert:", this.debugContoursImage.substring(0, 50) + "...");
-        validContourImg.delete();
-        validContours.delete();
-
-        if (!foundContour) {
-          console.log("No suitable contour found after filtering. Initializing default corners.");
-          const defaultCorners: DetectedCorners = {
-            topLeft: { x: 0, y: 0 },
-            topRight: { x: img.width, y: 0 },
-            bottomRight: { x: img.width, y: img.height },
-            bottomLeft: { x: 0, y: img.height }
-          };
-          this.detectedCorners = JSON.parse(JSON.stringify(defaultCorners));
-          this.adjustedCorners = JSON.parse(JSON.stringify(defaultCorners));
-
-          console.log("Setting state to ManualAdjust with default corners:", this.adjustedCorners);
-          this.currentState = PageState.ManualAdjust;
-
-          this.cdRef.detectChanges();
-          await new Promise(resolve => setTimeout(resolve, 50));
-          this.updateOverlaySize();
-        } else {
-          console.log("Erfolgreichste Kontur ausgewählt.");
-          maxContour = foundContour;
-          const pts: Point[] = [];
-          for (let i = 0; i < 4; i++) {
-            pts.push({
-              x: maxContour.intPtr(i, 0)[0],
-              y: maxContour.intPtr(i, 0)[1]
-            });
-          }
-          pts.sort((a, b) => a.y - b.y);
-          const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
-          const bottom = pts.slice(2, 4).sort((a, b) => a.x - b.x);
-          this.detectedCorners = {
-            topLeft: top[0],
-            topRight: top[1],
-            bottomRight: bottom[1],
-            bottomLeft: bottom[0],
-          };
-          this.adjustedCorners = JSON.parse(JSON.stringify(this.detectedCorners));
-          console.log("Setze Status auf ManualAdjust. Ecken:", this.detectedCorners);
-          this.currentState = PageState.ManualAdjust;
-          this.cdRef.detectChanges();
-          await new Promise(resolve => setTimeout(resolve, 50));
-          this.updateOverlaySize();
-        }
-      } catch (cvError) {
-        console.error("OpenCV Fehler während der Erkennung:", cvError);
-        alert("Ein Fehler ist bei der Bildverarbeitung aufgetreten.");
-        this.currentState = PageState.PhotoTaken;
-      } finally {
-        console.log("Gebe OpenCV Objekte frei...");
-        [src, gray, blurred, edges, /*contours,*/ hierarchy, maxContour].filter(m => m && typeof m.delete === 'function' && !m.isDeleted()).forEach(m => {
-          try {
-            m.delete();
-          } catch (e) {
-            console.error("Fehler beim Löschen von Mat:", e);
-          }
-        });
-        if (contours && typeof contours.delete === 'function' && !contours.isDeleted()) {
-          try {
-            contours.delete();
-          } catch (e) {
-            console.error("Fehler beim Löschen von contours MatVector:", e);
-          }
-        }
-        if (hierarchy && typeof hierarchy.delete === 'function' && !hierarchy.isDeleted()) {
-          try {
-            hierarchy.delete();
-          } catch (e) {
-            console.error("Fehler beim Löschen von hierarchy Mat:", e);
-          }
-        }
-        console.log("OpenCV Objekte freigegeben.");
-        this.cdRef.detectChanges();
+      if (result.corners) {
+        this.detectedCorners = result.corners;
+        this.adjustedCorners = JSON.parse(JSON.stringify(result.corners));
+        console.log("Erkennung erfolgreich. Konfidenz:", result.confidence, "Ecken:", this.detectedCorners);
+      } else {
+        console.log("Keine geeignete Kontur gefunden. Setze Standardecken.");
+        const defaultCorners: DetectedCorners = {
+          topLeft: {x: 0, y: 0},
+          topRight: {x: img.width, y: 0},
+          bottomRight: {x: img.width, y: img.height},
+          bottomLeft: {x: 0, y: img.height},
+        };
+        this.detectedCorners = defaultCorners;
+        this.adjustedCorners = JSON.parse(JSON.stringify(defaultCorners));
       }
+
+      this.currentState = PageState.ManualAdjust;
+      this.cdRef.detectChanges();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      this.updateOverlaySize();
     } catch (err) {
-      console.error("Fehler beim Laden des Bildes:", err);
-      alert("Bild konnte nicht geladen werden.");
+      console.error("Fehler bei der Dokumenterkennung:", err);
+      alert("Ein Fehler ist bei der Bildverarbeitung aufgetreten.");
       this.currentState = PageState.PhotoTaken;
       this.cdRef.detectChanges();
     }
