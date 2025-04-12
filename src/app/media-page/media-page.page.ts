@@ -62,6 +62,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   public originalPhoto: string | null = null;
   public rotationAngle: number = 0;
   public isOpenCvReady = false;
+  public hasUserAdjusted: boolean = false;
 
   private detectedCorners: DetectedCorners | null = null;
   private adjustedCorners: DetectedCorners | null = null;
@@ -1003,6 +1004,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       }
 
       this.currentState = PageState.ManualAdjust;
+      this.hasUserAdjusted = false;
       this.cdRef.detectChanges();
       await new Promise(resolve => setTimeout(resolve, 50));
       this.updateOverlaySize();
@@ -1139,15 +1141,15 @@ export class MediaPagePage implements OnInit, AfterViewInit {
         if (this.overlayCtx) {
           this.overlayCtx.scale(dpr, dpr);
           // Speichere Skalierung und Offset für drawOverlay
-          this.imageRect = {
-            width: displayWidth,
-            height: displayHeight,
-            left: this.imageRect.left + offsetX,
-            top: this.imageRect.top + offsetY,
-            right: this.imageRect.left + offsetX + displayWidth,
-            bottom: this.imageRect.top + offsetY + displayHeight,
-          } as DOMRect;
-          console.log("Angepasstes imageRect:", this.imageRect);
+          // this.imageRect = {
+          //   width: displayWidth,
+          //   height: displayHeight,
+          //   left: this.imageRect.left + offsetX,
+          //   top: this.imageRect.top + offsetY,
+          //   right: this.imageRect.left + offsetX + displayWidth,
+          //   bottom: this.imageRect.top + offsetY + displayHeight,
+          // } as DOMRect;
+          // console.log("Angepasstes imageRect:", this.imageRect);
           if (this.currentState === PageState.ManualAdjust) {
             this.drawOverlay();
           } else {
@@ -1203,16 +1205,21 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
     ctx.lineWidth = 5 / dpr;
     ctx.beginPath();
-    const p1 = {x: corners.topLeft.x * scaleX, y: corners.topLeft.y * scaleY};
-    const p2 = {x: corners.topRight.x * scaleX, y: corners.topRight.y * scaleY};
-    const p3 = {
-      x: corners.bottomRight.x * scaleX,
-      y: corners.bottomRight.y * scaleY
+    const clampPoint = (p: {x: number, y: number}) => ({
+      x: Math.max(0, Math.min(img.naturalWidth, p.x)),
+      y: Math.max(0, Math.min(img.naturalHeight, p.y))
+    });
+    const clampedCorners = {
+      topLeft: clampPoint(this.adjustedCorners.topLeft),
+      topRight: clampPoint(this.adjustedCorners.topRight),
+      bottomRight: clampPoint(this.adjustedCorners.bottomRight),
+      bottomLeft: clampPoint(this.adjustedCorners.bottomLeft)
     };
-    const p4 = {
-      x: corners.bottomLeft.x * scaleX,
-      y: corners.bottomLeft.y * scaleY
-    };
+
+    const p1 = {x: clampedCorners.topLeft.x * scaleX, y: clampedCorners.topLeft.y * scaleY};
+    const p2 = {x: clampedCorners.topRight.x * scaleX, y: clampedCorners.topRight.y * scaleY};
+    const p3 = {x: clampedCorners.bottomRight.x * scaleX, y: clampedCorners.bottomRight.y * scaleY};
+    const p4 = {x: clampedCorners.bottomLeft.x * scaleX, y: clampedCorners.bottomLeft.y * scaleY};
     console.log("Skalierte Punkte:", {p1, p2, p3, p4});
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
@@ -1224,7 +1231,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     const handleRadius = 15 / dpr;
     ctx.fillStyle = 'rgba(0, 255, 0, 0.9)';
     cornerKeys.forEach(key => {
-      const point = corners[key];
+      const point = clampPoint(corners[key]);
       const sx = point.x * scaleX;
       const sy = point.y * scaleY;
       ctx.beginPath();
@@ -1313,6 +1320,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     event.preventDefault();
     event.stopPropagation();
     console.log("Beende Drag von:", this.draggingPoint);
+    this.hasUserAdjusted = true;
     this.draggingPoint = null;
     if (this.overlayCanvasRef?.nativeElement) {
       this.overlayCanvasRef.nativeElement.style.cursor = 'grab';
@@ -1321,6 +1329,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
 
   public async cancelAdjust() {
     await this.detectDocument();
+    this.hasUserAdjusted = false;
     if (this.detectedCorners) {
       this.adjustedCorners = JSON.parse(JSON.stringify(this.detectedCorners));
       this.currentState = PageState.ManualAdjust;
@@ -1380,5 +1389,18 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     if (this.currentState !== PageState.NoPhoto && this.currentState !== PageState.Detecting) {
       this.updateOverlaySize();
     }
+  }
+
+
+  public cancelAdjustmentMode() {
+    console.log("Verlasse manuellen Anpassungsmodus, zurück zu PhotoTaken.");
+    this.capturedPhoto = this.originalPhoto;
+    this.currentState = PageState.Cropped;
+    this.detectedCorners = null;
+    this.adjustedCorners = null;
+    this.hasUserAdjusted = false;
+    this.clearOverlay();
+    this.draggingPoint = null;
+    this.cdRef.detectChanges();
   }
 }
