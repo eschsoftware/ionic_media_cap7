@@ -511,6 +511,37 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     }
   }
 
+  calculateCombinedConfidence(
+    area: number,
+    aspectRatio: number,
+    centerX: number,
+    centerY: number,
+    canvasWidth: number,
+    canvasHeight: number
+  ): number {
+    // Flächen-Score (normalisiert zur Bildfläche)
+    const areaScore = area / (canvasWidth * canvasHeight);
+
+    // Aspektverhältnis-Score (1, wenn zwischen 0.5 und 2.0, sonst 0)
+    const aspectScore = (aspectRatio >= 0.5 && aspectRatio <= 2.0) ? 1 : 0;
+
+    // Zentralitäts-Score (Abstand zum Bildzentrum relativ zur maximalen Distanz)
+    const imageCenterX = canvasWidth / 2;
+    const imageCenterY = canvasHeight / 2;
+    const distanceToCenter = Math.sqrt(
+      Math.pow(centerX - imageCenterX, 2) + Math.pow(centerY - imageCenterY, 2)
+    );
+    const maxDistance = Math.sqrt(
+      Math.pow(canvasWidth / 2, 2) + Math.pow(canvasHeight / 2, 2)
+    );
+    const centralityScore = 1 - (distanceToCenter / maxDistance);
+
+    // Kombinierte Confidence (gewichtete Summe)
+    const confidence =
+      (areaScore * 0.4) + (aspectScore * 0.3) + (centralityScore * 0.3);
+    return Math.min(1, Math.max(0, confidence)); // Begrenze zwischen 0 und 1
+  }
+
   public async receiptDetectionV3(
     img: HTMLImageElement,
     canvas: HTMLCanvasElement
@@ -645,7 +676,28 @@ export class MediaPagePage implements OnInit, AfterViewInit {
           topLeft: top[0], topRight: top[1],
           bottomRight: bottom[1], bottomLeft: bottom[0],
         };
-        resultConfidence = maxQuadAreaFound / (canvas.width * canvas.height); // Use area of the contour that led to this approx
+
+
+        // Area
+        const area = maxQuadAreaFound;
+
+        // Aspect ratio
+        const width = Math.max(...pts.map(p => p.x)) - Math.min(...pts.map(p => p.x));
+        const height = Math.max(...pts.map(p => p.y)) - Math.min(...pts.map(p => p.y));
+        const aspectRatio = width / height;
+
+        // Centricity
+        const centerX = pts.reduce((sum, p) => sum + p.x, 0) / 4;
+        const centerY = pts.reduce((sum, p) => sum + p.y, 0) / 4;
+
+        resultConfidence = this.calculateCombinedConfidence(
+          area,
+          aspectRatio,
+          centerX,
+          centerY,
+          canvas.width,
+          canvas.height
+        );
 
         let pointsVec = new cv.MatVector();
         pointsVec.push_back(bestQuadApprox);
@@ -669,7 +721,27 @@ export class MediaPagePage implements OnInit, AfterViewInit {
               topLeft: top[0], topRight: top[1],
               bottomRight: bottom[1], bottomLeft: bottom[0],
             };
-            resultConfidence = boundingArea / (canvas.width * canvas.height);
+
+            // Area
+            const area = maxQuadAreaFound;
+
+            // Aspect ratio
+            const width = Math.max(...pts.map(p => p.x)) - Math.min(...pts.map(p => p.x));
+            const height = Math.max(...pts.map(p => p.y)) - Math.min(...pts.map(p => p.y));
+            const aspectRatio = width / height;
+
+            // Centricity
+            const centerX = pts.reduce((sum, p) => sum + p.x, 0) / 4;
+            const centerY = pts.reduce((sum, p) => sum + p.y, 0) / 4;
+
+            resultConfidence = this.calculateCombinedConfidence(
+              area,
+              aspectRatio,
+              centerX,
+              centerY,
+              canvas.width,
+              canvas.height
+            );
 
             for (let j = 0; j < 4; j++) {
               cv.line(debugContoursMat, boxPoints[j], boxPoints[(j + 1) % 4], fallbackRectColor, 3);
@@ -687,7 +759,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       this.debugContoursImage = this.matToDataUrl(debugContoursMat);
 
       console.log(`Receipt Detection V3: Method='${detectionMethod}', Confidence=${resultConfidence.toFixed(3)}`);
-      return {corners: resultCorners, confidence: resultConfidence};
+      return {corners: resultCorners, confidence: resultConfidence - 0.05 /* adjusting because of algo*/};
 
     } catch (error) {
       console.error("Error during receipt detection V3:", error);
@@ -790,9 +862,10 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       normalizedGray.delete();
 
       const meanBrightness = cv.mean(gray)[0];
-      const cannyThreshold1 = Math.max(30, meanBrightness * 0.3);
-      const cannyThreshold2 = Math.max(117, meanBrightness * 0.6);
+      const cannyThreshold1 = Math.max(50, meanBrightness * 0.4);
+      const cannyThreshold2 = Math.max(150, meanBrightness * 0.8);
       cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
+
       const kernelSize = 3;
       let kernel = cv.getStructuringElement(
         cv.MORPH_RECT,
@@ -804,9 +877,9 @@ export class MediaPagePage implements OnInit, AfterViewInit {
 
       const rho = 1;
       const theta = Math.PI / 180;
-      const threshold = 50;
+      const threshold = 30;
       const minLineLength = Math.min(canvas.width, canvas.height) * 0.1;
-      const maxLineGap = 20;
+      const maxLineGap = 30;
 
       cv.HoughLinesP(
         morphedEdges,
@@ -847,9 +920,9 @@ export class MediaPagePage implements OnInit, AfterViewInit {
         };
         detectedLines.push(line);
 
-        if (Math.abs(props.angle) < angleTolerance) {
+        if (Math.abs(props.angle) < angleTolerance && props.length > minLineLength * 0.8) {
           horizontalLines.push(line);
-        } else if (Math.abs(Math.abs(props.angle) - 90) < angleTolerance) {
+        } else if (Math.abs(Math.abs(props.angle) - 90) < angleTolerance && props.length > minLineLength * 0.8) {
           verticalLines.push(line);
         }
 
@@ -902,7 +975,24 @@ export class MediaPagePage implements OnInit, AfterViewInit {
               tl.x * tr.y + tr.x * br.y + br.x * bl.y + bl.x * tl.y -
               (tl.y * tr.x + tr.y * br.x + br.y * bl.x + bl.y * tl.x)
             );
-            resultConfidence = area / (canvas.width * canvas.height);
+
+
+            // Area
+            const areaScore = area / (canvas.width * canvas.height);
+            // Aspect Ratio
+            const width = Math.max(tl.x, tr.x, br.x, bl.x) - Math.min(tl.x, tr.x, br.x, bl.x);
+            const height = Math.max(tl.y, tr.y, br.y, bl.y) - Math.min(tl.y, tr.y, br.y, bl.y);
+            const aspectRatio = width / height;
+            const aspectScore = (aspectRatio >= 0.5 && aspectRatio <= 2.0) ? 1 : 0;
+            // Centrality
+            const centerX = (tl.x + tr.x + br.x + bl.x) / 4;
+            const centerY = (tl.y + tr.y + br.y + bl.y) / 4;
+            const imageCenterX = canvas.width / 2;
+            const imageCenterY = canvas.height / 2;
+            const distanceToCenter = Math.sqrt(Math.pow(centerX - imageCenterX, 2) + Math.pow(centerY - imageCenterY, 2));
+            const centralityScore = 1 - (distanceToCenter / (Math.max(canvas.width, canvas.height) / 2)); // Wert zwischen 0 und 1
+            resultConfidence = (areaScore * 0.3) + (aspectScore * 0.4) + (centralityScore * 0.3);
+            //resultConfidence = area / (canvas.width * canvas.height);
 
             const finalColor = new cv.Scalar(0, 255, 255, 255); // Yellow
             cv.circle(debugLinesMat, new cv.Point(tl.x, tl.y), 5, finalColor, -1);
@@ -947,12 +1037,14 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     const results = await Promise.all([
       //this.standardDocumentDetection(img, canvas), // standard algo den wir zu beginn hatten
       //this.receiptDetection(img, canvas),
-      //this.receiptDetectionV3(img, canvas), // erkennt gut wo die dokumente sind, aber der rahmen ist zu klein
+      //this.receiptDetectionV3(img, canvas),
       this.detectionWithHough(img, canvas),
     ]);
 
-    const bestResult = results.reduce((best, current) =>
-        current.confidence > best.confidence ? current : best,
+    const bestResult = results.reduce((best, current, currentIndex) => {
+      console.log(`Detection method ${currentIndex} confidence: ${current.confidence}`);
+      return current.confidence > best.confidence ? current : best;
+    },
       {corners: null, confidence: 0} as DetectionResult
     );
 

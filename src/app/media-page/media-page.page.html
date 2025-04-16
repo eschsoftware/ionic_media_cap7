@@ -32,29 +32,6 @@
     </div>
   </div>
 
-  <!-- Debug-Bilder -->
-  <div class="debug-images" *ngIf="debugAdaptiveThresholdImage || debugMorphedImage || debugContoursImage || debugMorphedEdgesImage || debugEdgesImage">
-    <div *ngIf="debugAdaptiveThresholdImage" class="debug-image-container">
-      <p>Kanten nach Morphologie</p>
-      <img [src]="debugAdaptiveThresholdImage" alt="Kanten nach Morphologie" class="debug-image" />
-    </div>
-    <div *ngIf="debugMorphedImage" class="debug-image-container">
-      <p>Kanten nach Morphologie</p>
-      <img [src]="debugMorphedImage" alt="Kanten nach Morphologie" class="debug-image" />
-    </div>
-    <div *ngIf="debugEdgesImage" class="debug-image-container">
-      <p>Kanten nach Morphologie</p>
-      <img [src]="debugEdgesImage" alt="Kanten nach Morphologie" class="debug-image" />
-    </div>
-    <div *ngIf="debugMorphedEdgesImage" class="debug-image-container">
-      <p>Kanten nach Morphologie</p>
-      <img [src]="debugMorphedEdgesImage" alt="Kanten nach Morphologie" class="debug-image" />
-    </div>
-    <div *ngIf="debugContoursImage" class="debug-image-container">
-      <p>Gefilterte Kontur (rot)</p>
-      <img [src]="debugContoursImage" alt="Gefilterte Kontur" class="debug-image" />
-    </div>
-  </div>
 
   <canvas #processingCanvas hidden></canvas>
 
