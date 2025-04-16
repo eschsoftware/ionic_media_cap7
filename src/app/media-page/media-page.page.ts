@@ -1337,11 +1337,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     this.cdRef.detectChanges();
   }
 
-
-  public onFilter() {
-    console.log('Filter anwenden (nicht implementiert)');
-  }
-
   public onSave() {
     if (this.capturedPhoto && (this.currentState === PageState.Cropped || this.currentState === PageState.PhotoTaken)) {
       alert("Bild gespeichert (simuliert).");

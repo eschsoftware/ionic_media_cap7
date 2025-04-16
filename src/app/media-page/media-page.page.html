@@ -69,14 +69,6 @@
       <ion-button shape="round" (click)="resetFromPhoto()" color="warning" fill="solid" title="Anpassung zurücksetzen">
         <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
       </ion-button>
-
-
-      <ion-button shape="round" (click)="detectDocument()" [disabled]="!isOpenCvReady || currentState === PageState.Cropped" color="primary" fill="solid">
-        <ion-icon name="scan-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-      <ion-button shape="round" (click)="onFilter()" color="primary" fill="solid">
-        <ion-icon name="color-filter-outline" slot="icon-only"></ion-icon>
-      </ion-button>
       <ion-button shape="round" (click)="onSave()" color="success" fill="solid">
         <ion-icon name="save-outline" slot="icon-only"></ion-icon>
       </ion-button>
