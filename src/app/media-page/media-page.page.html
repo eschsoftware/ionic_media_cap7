@@ -69,9 +69,7 @@
       <ion-button shape="round" (click)="resetFromPhoto()" color="warning" fill="solid" title="Anpassung zurücksetzen">
         <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
       </ion-button>
-      <ion-button shape="round" (click)="onRotate()" [disabled]="currentState === PageState.Cropped" color="primary" fill="solid">
-        <ion-icon name="refresh" slot="icon-only"></ion-icon>
-      </ion-button>
+
 
       <ion-button shape="round" (click)="detectDocument()" [disabled]="!isOpenCvReady || currentState === PageState.Cropped" color="primary" fill="solid">
         <ion-icon name="scan-outline" slot="icon-only"></ion-icon>
@@ -92,6 +90,10 @@
     <ion-buttons>
       <ion-button shape="round" (click)="cancelAdjust()" [disabled]="!hasUserAdjusted" color="warning" fill="solid" title="Anpassung zurücksetzen">
         <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+
+      <ion-button shape="round" (click)="onRotate()" color="primary" fill="solid">
+        <ion-icon name="refresh" slot="icon-only"></ion-icon>
       </ion-button>
 
       <ion-button shape="round" (click)="applyPerspectiveTransform()" color="success" fill="solid" title="Zuschneiden bestätigen">

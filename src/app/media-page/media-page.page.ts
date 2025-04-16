@@ -145,7 +145,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   async resetFromPhoto() {
     console.log("resetFromPhoto aufgerufen");
     this.capturedPhoto = this.originalPhoto;
-    this.rotationAngle = 0;
     this.detectedCorners = null;
     this.adjustedCorners = null;
     this.currentState = PageState.NoPhoto;
@@ -162,7 +161,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     console.log("resetState aufgerufen.");
     this.capturedPhoto = null;
     this.originalPhoto = null;
-    this.rotationAngle = 0;
     this.detectedCorners = null;
     this.adjustedCorners = null;
     this.currentState = PageState.NoPhoto;
@@ -185,7 +183,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       const base64 = `data:image/${image.format};base64,${image.base64String}`;
       this.originalPhoto = base64;
       this.capturedPhoto = base64;
-      this.rotationAngle = 0;
       this.detectedCorners = null;
       this.adjustedCorners = null;
       this.currentState = PageState.PhotoTaken;
@@ -218,23 +215,17 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   }
 
   public async onRotate() {
-    if (!this.originalPhoto || this.currentState === PageState.ManualAdjust) return;
+    if (!this.capturedPhoto) return;
     this.isImageLoaded = false;
     try {
-      const img = await this.loadImage(this.originalPhoto);
+      const img = await this.loadImage(this.capturedPhoto);
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Kein 2D-Kontext verfügbar.");
-      this.rotationAngle = (this.rotationAngle + 90) % 360;
-      if (this.rotationAngle === 90 || this.rotationAngle === 270) {
-        canvas.width = img.height;
-        canvas.height = img.width;
-      } else {
-        canvas.width = img.width;
-        canvas.height = img.height;
-      }
+      canvas.width = img.height;
+      canvas.height = img.width;
       ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate((this.rotationAngle * Math.PI) / 180);
+      ctx.rotate((90 * Math.PI) / 180);
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
       this.originalPhoto = canvas.toDataURL("image/jpeg", 1.0);
       this.capturedPhoto = this.originalPhoto;
@@ -243,6 +234,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       console.error("Fehler beim Rotieren des Bildes:", err);
       this.isImageLoaded = true; // Zurücksetzen
     }
+    await this.cancelAdjust();
   }
 
   calculateMeanBrightness(grayMat: any): number {
@@ -802,7 +794,10 @@ export class MediaPagePage implements OnInit, AfterViewInit {
       const cannyThreshold2 = Math.max(117, meanBrightness * 0.6);
       cv.Canny(blurred, edges, cannyThreshold1, cannyThreshold2);
       const kernelSize = 3;
-      let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
+      let kernel = cv.getStructuringElement(
+        cv.MORPH_RECT,
+        new cv.Size(kernelSize, kernelSize)
+      );
       cv.dilate(edges, morphedEdges, kernel, new cv.Point(-1, -1), 2);
       cv.erode(morphedEdges, morphedEdges, kernel, new cv.Point(-1, -1), 1);
       kernel.delete();
