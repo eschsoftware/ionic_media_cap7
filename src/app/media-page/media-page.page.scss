@@ -27,6 +27,10 @@ ion-content {
   transform-origin: center;
 }
 
+.image-container img.clickable {
+  cursor: pointer;
+}
+
 .overlay-canvas {
   position: absolute;
   top: 0;
@@ -119,4 +123,115 @@ ion-content {
 
 .no-text-back-button::part(text) {
   display: none;
+}
+
+.fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.fullscreen-overlay.closing {
+  animation: fadeOut 0.3s ease-in-out;
+}
+
+/* Alternative style for fullscreen below header */
+.fullscreen-below-header {
+  top: 56px; /* Standard Ionic header height */
+}
+
+/* Adjust container height when below header */
+.fullscreen-below-header .fullscreen-image-container {
+  height: calc(100% - 56px); /* Subtract header height */
+}
+
+.fullscreen-image-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.fullscreen-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  animation: zoomIn 0.3s ease-in-out;
+  transform-origin: center;
+}
+
+.fullscreen-image.closing {
+  animation: zoomOut 0.3s ease-in-out;
+}
+
+.close-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: rgba(255, 0, 0, 0.7);
+  color: white;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  z-index: 1001;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.close-button ion-icon {
+  font-size: 30px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes zoomOut {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.8);
+    opacity: 0;
+  }
 }

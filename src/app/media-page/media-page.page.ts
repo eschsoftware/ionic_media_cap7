@@ -31,7 +31,8 @@ enum PageState {
   PhotoTaken,
   Detecting,
   ManualAdjust,
-  Cropped
+  Cropped,
+  Fullscreen
 }
 
 interface DetectionResult {
@@ -63,6 +64,11 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   public rotationAngle: number = 0;
   public isOpenCvReady = false;
   public hasUserAdjusted: boolean = false;
+  public fullscreenBelowHeader: boolean = true;
+  public isClosingFullscreen: boolean = false;
+
+  private touchStartY: number = 0;
+  private touchCurrentY: number = 0;
 
   private detectedCorners: DetectedCorners | null = null;
   private adjustedCorners: DetectedCorners | null = null;
@@ -1484,5 +1490,48 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     this.clearOverlay();
     this.draggingPoint = null;
     this.cdRef.detectChanges();
+  }
+
+  public onImageClick() {
+    if (this.currentState === PageState.Cropped && this.capturedPhoto) {
+      console.log("Entering fullscreen mode");
+      this.currentState = PageState.Fullscreen;
+      this.cdRef.detectChanges();
+    }
+  }
+
+  public closeFullscreen() {
+    console.log("Closing fullscreen mode");
+    this.isClosingFullscreen = true;
+    this.cdRef.detectChanges();
+
+    setTimeout(() => {
+      this.currentState = PageState.Cropped;
+      this.isClosingFullscreen = false;
+      this.cdRef.detectChanges();
+    }, 300);
+  }
+
+  public onFullscreenTouchStart(event: TouchEvent) {
+    if (this.currentState === PageState.Fullscreen) {
+      this.touchStartY = event.touches[0].clientY;
+      this.touchCurrentY = this.touchStartY;
+    }
+  }
+
+  public onFullscreenTouchMove(event: TouchEvent) {
+    if (this.currentState === PageState.Fullscreen) {
+      this.touchCurrentY = event.touches[0].clientY;
+    }
+  }
+
+  public onFullscreenTouchEnd(event: TouchEvent) {
+    if (this.currentState === PageState.Fullscreen) {
+      const swipeDistance = this.touchCurrentY - this.touchStartY;
+      if (swipeDistance > 100) {
+        console.log("Swipe down detected, closing fullscreen");
+        this.closeFullscreen();
+      }
+    }
   }
 }

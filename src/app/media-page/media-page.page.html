@@ -1,3 +1,19 @@
+<div class="fullscreen-overlay"
+     [class.fullscreen-below-header]="fullscreenBelowHeader"
+     [class.closing]="isClosingFullscreen"
+     *ngIf="currentState === PageState.Fullscreen"
+     (touchstart)="onFullscreenTouchStart($event)"
+     (touchmove)="onFullscreenTouchMove($event)"
+     (touchend)="onFullscreenTouchEnd($event)"
+     (click)="closeFullscreen()">
+  <div class="fullscreen-image-container" (click)="$event.stopPropagation()">
+    <img [src]="capturedPhoto" alt="Fullscreen Foto" class="fullscreen-image" [class.closing]="isClosingFullscreen" />
+    <button class="close-button" (click)="closeFullscreen()">
+      <ion-icon name="close-outline"></ion-icon>
+    </button>
+  </div>
+</div>
+
 <ion-header>
   <ion-toolbar color="primary">
     <ion-buttons slot="start">
@@ -15,7 +31,9 @@
     <div>
     <img #photoDisplay *ngIf="capturedPhoto"
          [src]="capturedPhoto" alt="Aufgenommenes Foto" id="photo"
-         (load)="updateOverlaySize()" /> <canvas #overlayCanvas class="overlay-canvas"
+         [class.clickable]="currentState === PageState.Cropped"
+         (load)="updateOverlaySize()"
+         (click)="onImageClick()" /> <canvas #overlayCanvas class="overlay-canvas"
                                                  *ngIf="currentState === PageState.ManualAdjust"
                                                  (mousedown)="startDrag($event)"
                                                  (touchstart)="startDrag($event)"
