@@ -7,13 +7,15 @@ import { IonicModule } from '@ionic/angular';
 import { MediaPagePageRoutingModule } from './media-page-routing.module';
 
 import { MediaPagePage } from './media-page.page';
+import { FullscreenOverlayModule } from '../fullscreen-overlay/fullscreen-overlay.module';
 
 @NgModule({
   imports: [
     CommonModule,
     FormsModule,
     IonicModule,
-    MediaPagePageRoutingModule
+    MediaPagePageRoutingModule,
+    FullscreenOverlayModule
   ],
   declarations: [MediaPagePage]
 })

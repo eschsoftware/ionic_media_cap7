@@ -1,20 +1,10 @@
-<div class="fullscreen-overlay"
-     [class.fullscreen-below-header]="fullscreenBelowHeader"
-     [class.closing]="isClosingFullscreen"
+<app-fullscreen-overlay
      *ngIf="currentState === PageState.Fullscreen"
-     (touchstart)="onFullscreenTouchStart($event)"
-     (touchmove)="onFullscreenTouchMove($event)"
-     (touchend)="onFullscreenTouchEnd($event)"
-     (click)="closeFullscreen()">
-  <div class="fullscreen-image-container" (click)="$event.stopPropagation()">
-    <img [src]="capturedPhoto" alt="Fullscreen Foto" class="fullscreen-image"
-         [class.closing]="isClosingFullscreen"
-         [style.transform]="imageTransform" />
-    <button class="close-button" (click)="closeFullscreen()">
-      <ion-icon name="close-outline"></ion-icon>
-    </button>
-  </div>
-</div>
+     [imageSrc]="capturedPhoto"
+     [belowHeader]="fullscreenBelowHeader"
+     [isClosing]="isClosingFullscreen"
+     (close)="closeFullscreen()">
+</app-fullscreen-overlay>
 
 <ion-header>
   <ion-toolbar color="primary">

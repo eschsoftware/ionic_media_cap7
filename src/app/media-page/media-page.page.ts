@@ -66,23 +66,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   public hasUserAdjusted: boolean = false;
   public fullscreenBelowHeader: boolean = true;
   public isClosingFullscreen: boolean = false;
-  public imageScale: number = 1;
-  public imageTransform: string = 'scale(1)';
-
-  private touchStartY: number = 0;
-  private touchCurrentY: number = 0;
-  private initialPinchDistance: number = 0;
-  private pinchStartImageScale: number = 1;
-  private pinchStartTranslateX: number = 0;
-  private pinchStartTranslateY: number = 0;
-  private pinchStartViewportCenterX: number = 0;
-  private pinchStartViewportCenterY: number = 0;
-  private isPinching: boolean = false;
-  private translateX: number = 0;
-  private translateY: number = 0;
-  private lastTouchX: number = 0;
-  private lastTouchY: number = 0;
-  private isMoving: boolean = false;
 
   private detectedCorners: DetectedCorners | null = null;
   private adjustedCorners: DetectedCorners | null = null;
@@ -1509,10 +1492,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
   public onImageClick() {
     if (this.currentState === PageState.Cropped && this.capturedPhoto) {
       console.log("Entering fullscreen mode");
-      this.imageScale = 1; // Reset scale when entering fullscreen
-      this.translateX = 0; // Reset translation when entering fullscreen
-      this.translateY = 0; // Reset translation when entering fullscreen
-      this.imageTransform = 'scale(1)'; // Reset transform when entering fullscreen
       this.currentState = PageState.Fullscreen;
       this.cdRef.detectChanges();
     }
@@ -1526,146 +1505,7 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     setTimeout(() => {
       this.currentState = PageState.Cropped;
       this.isClosingFullscreen = false;
-      this.imageScale = 1; // Reset scale when closing
-      this.translateX = 0; // Reset translation when closing
-      this.translateY = 0; // Reset translation when closing
-      this.imageTransform = 'scale(1)'; // Reset transform when closing
       this.cdRef.detectChanges();
     }, 300);
-  }
-
-  public onFullscreenTouchStart(event: TouchEvent) {
-    if (this.currentState === PageState.Fullscreen) {
-      if (event.touches.length === 1) {
-        // Single touch - track for swipe or panning
-        this.touchStartY = event.touches[0].clientY;
-        this.touchCurrentY = this.touchStartY;
-        this.lastTouchX = event.touches[0].clientX;
-        this.lastTouchY = event.touches[0].clientY;
-
-        // If the image is zoomed in, we'll use this touch for panning
-        if (this.imageScale > 1) {
-          this.isMoving = true;
-        } else {
-          this.isMoving = false;
-        }
-
-        this.isPinching = false;
-      } else if (event.touches.length === 2) {
-        // Two touches - start pinch zoom
-        this.isPinching = true;
-        this.isMoving = false;
-        this.initialPinchDistance = this.getPinchDistance(event);
-
-        this.pinchStartImageScale = this.imageScale;
-        this.pinchStartTranslateX = this.translateX;
-        this.pinchStartTranslateY = this.translateY;
-        this.pinchStartViewportCenterX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
-        this.pinchStartViewportCenterY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
-
-        event.preventDefault(); // Prevent default to avoid scrolling
-      }
-    }
-  }
-
-  public onFullscreenTouchMove(event: TouchEvent) {
-    if (this.currentState === PageState.Fullscreen) {
-      if (this.isPinching && event.touches.length === 2) { // Check isPinching state
-        // --- PINCH ZOOM LOGIC ---
-        const currentDistance = this.getPinchDistance(event);
-        if (this.initialPinchDistance > 0) {
-          const scaleFactorFromStart = currentDistance / this.initialPinchDistance;
-          const newProposedScale = this.pinchStartImageScale * scaleFactorFromStart;
-          // Apply scale with limits (min 1, max 5, or other preferred values)
-          const newActualScale = Math.max(0.5, Math.min(5, newProposedScale));
-
-          // Only update if scale has effectively changed
-          if (newActualScale !== this.imageScale) {
-            const container = document.querySelector('.fullscreen-image-container');
-            if (container) {
-              const rect = container.getBoundingClientRect();
-              // Center of the scaling operation (usually the center of the container/image)
-              const scalingOriginX_vp = rect.left + rect.width / 2;
-              const scalingOriginY_vp = rect.top + rect.height / 2;
-
-              // Focal point for the zoom (where the pinch started)
-              const focalPointX_vp = this.pinchStartViewportCenterX;
-              const focalPointY_vp = this.pinchStartViewportCenterY;
-
-              const focalRelToScalingOriginX = focalPointX_vp - scalingOriginX_vp;
-              const focalRelToScalingOriginY = focalPointY_vp - scalingOriginY_vp;
-
-              const oldTx = this.pinchStartTranslateX;
-              const oldTy = this.pinchStartTranslateY;
-              const oldEffectiveScale = this.pinchStartImageScale;
-
-              if (oldEffectiveScale === 0) return; // Avoid division by zero
-
-              // Apply the formula: Tx_new = P_x * (1 - S_new/S_old) + Tx_old * (S_new/S_old)
-              this.translateX = focalRelToScalingOriginX * (1 - newActualScale / oldEffectiveScale) + oldTx * (newActualScale / oldEffectiveScale);
-              this.translateY = focalRelToScalingOriginY * (1 - newActualScale / oldEffectiveScale) + oldTy * (newActualScale / oldEffectiveScale);
-              this.imageScale = newActualScale;
-            }
-          }
-        }
-        event.preventDefault(); // Prevent default to avoid scrolling during pinch
-      } else if (this.isMoving && event.touches.length === 1 && this.imageScale > 1) { // Check isMoving state
-        // --- PANNING LOGIC ---
-        const currentX = event.touches[0].clientX;
-        const currentY = event.touches[0].clientY;
-
-        const deltaX = currentX - this.lastTouchX;
-        const deltaY = currentY - this.lastTouchY;
-
-        // Apply translation directly for 1:1 movement with finger
-        this.translateX += deltaX;
-        this.translateY += deltaY;
-
-        this.lastTouchX = currentX;
-        this.lastTouchY = currentY;
-        event.preventDefault(); // Prevent default to avoid scrolling during pan
-      } else if (event.touches.length === 1 && !this.isMoving) {
-        // Single touch, not moving (yet) - track for swipe
-        this.touchCurrentY = event.touches[0].clientY;
-      }
-
-      // Update the transform string if any change occurred
-      this.imageTransform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.imageScale})`;
-    }
-  }
-
-  public onFullscreenTouchEnd(event: TouchEvent) {
-    if (this.currentState === PageState.Fullscreen) {
-      if (!this.isPinching && !this.isMoving) {
-        // Handle swipe only if we weren't pinching or moving
-        const swipeDistance = this.touchCurrentY - this.touchStartY;
-        if (swipeDistance > 100) { // Threshold for swipe down
-          console.log("Swipe down detected, closing fullscreen");
-          this.closeFullscreen();
-        }
-      }
-
-      // Reset states if all fingers are lifted or if the number of touches changes unexpectedly
-      if (event.touches.length === 0) {
-        this.isPinching = false;
-        this.isMoving = false;
-      } else if (event.touches.length === 1 && this.isPinching) {
-        // If was pinching and one finger is lifted, transition to potential panning
-        this.isPinching = false;
-        this.isMoving = this.imageScale > 1; // Start moving if zoomed
-        this.lastTouchX = event.touches[0].clientX; // Re-initialize for panning
-        this.lastTouchY = event.touches[0].clientY;
-        this.touchStartY = event.touches[0].clientY; // Re-initialize for swipe
-        this.touchCurrentY = this.touchStartY;
-      }
-    }
-  }
-
-  private getPinchDistance(event: TouchEvent): number {
-    if (event.touches.length < 2) return 0;
-
-    const dx = event.touches[0].clientX - event.touches[1].clientX;
-    const dy = event.touches[0].clientY - event.touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 }
