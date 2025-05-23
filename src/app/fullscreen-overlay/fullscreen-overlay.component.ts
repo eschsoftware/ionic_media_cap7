@@ -115,7 +115,8 @@ export class FullscreenOverlayComponent {
       this.touchCurrentY = event.touches[0].clientY;
     }
 
-    this.imageTransform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.imageScale})`;
+    // Verwende translate3d für Hardware-Beschleunigung
+    this.imageTransform = `translate3d(${this.translateX}px, ${this.translateY}px, 0) scale3d(${this.imageScale}, ${this.imageScale}, 1)`;
   }
 
   public onFullscreenTouchEnd(event: TouchEvent): void {
@@ -166,7 +167,7 @@ export class FullscreenOverlayComponent {
     this.imageScale = 1;
     this.translateX = 0;
     this.translateY = 0;
-    this.imageTransform = 'scale(1)';
+    this.imageTransform = 'translate3d(0px, 0px, 0) scale3d(1, 1, 1)';
     this.cdRef.detectChanges();
   }
 }

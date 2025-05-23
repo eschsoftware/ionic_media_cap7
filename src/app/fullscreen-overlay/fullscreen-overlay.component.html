@@ -8,7 +8,9 @@
   <div class="fullscreen-image-container" (click)="$event.stopPropagation()">
     <img [src]="imageSrc" alt="Fullscreen Foto" class="fullscreen-image"
          [class.closing]="isClosing"
-         [style.transform]="imageTransform" />
+         [style.transform]="imageTransform"
+         style="-webkit-user-drag: none; user-select: none;"
+         draggable="false" />
     <button class="close-button" (click)="closeFullscreen()">
       <ion-icon name="close-outline"></ion-icon>
     </button>

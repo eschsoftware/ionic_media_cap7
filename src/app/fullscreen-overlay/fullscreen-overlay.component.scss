@@ -39,8 +39,14 @@
   object-fit: contain;
   animation: zoomIn 0.3s ease-in-out;
   transform-origin: center;
-  transition: transform 0.1s ease-out;
+  transition: transform 0s linear;
   will-change: transform;
+  -webkit-backface-visibility: hidden;
+  -webkit-perspective: 1000;
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000;
+  transform: translateZ(0);
 }
 
 .fullscreen-image.closing {
