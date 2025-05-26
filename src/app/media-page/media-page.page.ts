@@ -1277,19 +1277,6 @@ export class MediaPagePage implements OnInit, AfterViewInit {
     const corners = this.adjustedCorners;
     console.log("Ecken (Originalkoordinaten):", JSON.stringify(corners));
 
-    // Test: Zeichne ein rotes Kreuz in der Bildmitte
-    const centerX = img.naturalWidth / 2 * scaleX;
-    const centerY = img.naturalHeight / 2 * scaleY;
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2 / dpr;
-    ctx.beginPath();
-    ctx.moveTo(centerX - 20, centerY);
-    ctx.lineTo(centerX + 20, centerY);
-    ctx.moveTo(centerX, centerY - 20);
-    ctx.lineTo(centerX, centerY + 20);
-    ctx.stroke();
-    console.log(`Testkreuz bei: (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
-
     // Rest des Codes bleibt gleich
     const cornerKeys: (keyof DetectedCorners)[] = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'];
     ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
