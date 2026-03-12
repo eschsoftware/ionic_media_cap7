@@ -71,4 +71,9 @@ Thumbs.db
 
 *.iml
 .idea/**
-android/**
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/local.properties
+android/app/.cxx/

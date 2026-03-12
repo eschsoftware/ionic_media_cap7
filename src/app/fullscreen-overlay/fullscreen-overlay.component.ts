@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectorRef, HostListener } from '@angular/core';
 
 @Component({
   selector: 'app-fullscreen-overlay',
@@ -35,6 +35,66 @@ export class FullscreenOverlayComponent {
     this.close.emit();
   }
 
+  @HostListener('window:resize')
+  onWindowResize() {
+    if (this.imageScale <= 1) {
+      this.translateX = 0;
+      this.translateY = 0;
+    } else {
+      this.adjustPositionAfterResize();
+    }
+    this.imageTransform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.imageScale})`;
+    this.cdRef.detectChanges();
+  }
+
+  private adjustPositionAfterResize(): void {
+    const imageElement = document.querySelector('.fullscreen-image') as HTMLElement;
+    const containerElement = document.querySelector('.fullscreen-image-container') as HTMLElement;
+
+    if (imageElement && containerElement && imageElement.offsetWidth > 0 && containerElement.offsetWidth > 0) {
+      const containerWidth = containerElement.offsetWidth;
+      const containerHeight = containerElement.offsetHeight;
+
+      const imageNaturalWidth = (imageElement as HTMLImageElement).naturalWidth;
+      const imageNaturalHeight = (imageElement as HTMLImageElement).naturalHeight;
+
+      if (imageNaturalWidth === 0 || imageNaturalHeight === 0) return;
+
+
+      let imageDisplayWidth = imageNaturalWidth * this.imageScale;
+      let imageDisplayHeight = imageNaturalHeight * this.imageScale;
+
+
+      const viewportAspectRatio = containerWidth / containerHeight;
+      const naturalImageAspectRatio = imageNaturalWidth / imageNaturalHeight;
+
+      let actualRenderedWidthInContainer;
+      let actualRenderedHeightInContainer;
+
+      if (naturalImageAspectRatio > viewportAspectRatio) { // Image is wider than container or same aspect ratio, fits by width
+        actualRenderedWidthInContainer = containerWidth;
+        actualRenderedHeightInContainer = containerWidth / naturalImageAspectRatio;
+      } else { // Image is taller than container, fits by height
+        actualRenderedHeightInContainer = containerHeight;
+        actualRenderedWidthInContainer = containerHeight * naturalImageAspectRatio;
+      }
+
+      imageDisplayWidth = actualRenderedWidthInContainer * this.imageScale;
+      imageDisplayHeight = actualRenderedHeightInContainer * this.imageScale;
+
+
+      const maxTranslateX = Math.max(0, (imageDisplayWidth - containerWidth) / 2);
+      const maxTranslateY = Math.max(0, (imageDisplayHeight - containerHeight) / 2);
+
+      this.translateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, this.translateX));
+      this.translateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, this.translateY));
+    } else {
+      this.translateX = 0;
+      this.translateY = 0;
+    }
+  }
+
+
   public onFullscreenTouchStart(event: TouchEvent): void {
     if (event.touches.length === 1) {
       this.touchStartY = event.touches[0].clientY;
@@ -47,19 +107,16 @@ export class FullscreenOverlayComponent {
       } else {
         this.isMoving = false;
       }
-
       this.isPinching = false;
     } else if (event.touches.length === 2) {
       this.isPinching = true;
       this.isMoving = false;
       this.initialPinchDistance = this.getPinchDistance(event);
-
       this.pinchStartImageScale = this.imageScale;
       this.pinchStartTranslateX = this.translateX;
       this.pinchStartTranslateY = this.translateY;
       this.pinchStartViewportCenterX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
       this.pinchStartViewportCenterY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
-
       event.preventDefault();
     }
   }
@@ -94,6 +151,13 @@ export class FullscreenOverlayComponent {
             this.translateX = focalRelToScalingOriginX * (1 - newActualScale / oldEffectiveScale) + oldTx * (newActualScale / oldEffectiveScale);
             this.translateY = focalRelToScalingOriginY * (1 - newActualScale / oldEffectiveScale) + oldTy * (newActualScale / oldEffectiveScale);
             this.imageScale = newActualScale;
+
+            if (this.imageScale === 1) {
+              this.translateX = 0;
+              this.translateY = 0;
+            } else {
+              this.adjustPositionAfterResize(); // Clamping auch hier anwenden
+            }
           }
         }
       }
@@ -108,6 +172,8 @@ export class FullscreenOverlayComponent {
       this.translateX += deltaX;
       this.translateY += deltaY;
 
+      this.adjustPositionAfterResize(); // Clamping auch hier anwenden
+
       this.lastTouchX = currentX;
       this.lastTouchY = currentY;
       event.preventDefault();
@@ -120,32 +186,31 @@ export class FullscreenOverlayComponent {
   }
 
   public onFullscreenTouchEnd(event: TouchEvent): void {
-    // Check if the touch is outside the image container
+    const wasPinching = this.isPinching;
+    const wasMoving = this.isMoving;
+
     if (event.changedTouches && event.changedTouches.length > 0) {
       const touch = event.changedTouches[0];
       const target = touch.target as HTMLElement;
-      const imageContainer = document.querySelector('.fullscreen-image-container');
-
-      // If the touch target is not inside the image container, close the fullscreen
-      if (imageContainer && !imageContainer.contains(target)) {
-        console.log("Touch outside image detected, closing fullscreen");
-        this.closeFullscreen();
-        return;
-      }
-    }
-
-    if (!this.isPinching && !this.isMoving) {
-      const swipeDistance = this.touchCurrentY - this.touchStartY;
-      if (swipeDistance > 100) {
-        console.log("Swipe down detected, closing fullscreen");
-        this.closeFullscreen();
+      if (!target.closest('.close-button')) {
+        const imageContainer = document.querySelector('.fullscreen-image-container');
+        if (imageContainer && !imageContainer.contains(target)) {
+          this.closeFullscreen();
+          return;
+        }
       }
     }
 
     if (event.touches.length === 0) {
       this.isPinching = false;
       this.isMoving = false;
-    } else if (event.touches.length === 1 && this.isPinching) {
+      if (!wasPinching && !wasMoving && event.changedTouches.length === 1) {
+        const swipeDistance = this.touchCurrentY - this.touchStartY;
+        if (swipeDistance > 100) {
+          this.closeFullscreen();
+        }
+      }
+    } else if (event.touches.length === 1 && wasPinching) {
       this.isPinching = false;
       this.isMoving = this.imageScale > 1;
       this.lastTouchX = event.touches[0].clientX;
@@ -153,11 +218,15 @@ export class FullscreenOverlayComponent {
       this.touchStartY = event.touches[0].clientY;
       this.touchCurrentY = this.touchStartY;
     }
+    if (this.imageScale === 1) { // Sicherstellen, dass bei Scale 1 keine Translation übrig bleibt
+      this.translateX = 0;
+      this.translateY = 0;
+      this.imageTransform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.imageScale})`;
+    }
   }
 
   private getPinchDistance(event: TouchEvent): number {
     if (event.touches.length < 2) return 0;
-
     const dx = event.touches[0].clientX - event.touches[1].clientX;
     const dy = event.touches[0].clientY - event.touches[1].clientY;
     return Math.sqrt(dx * dx + dy * dy);

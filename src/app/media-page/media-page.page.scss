@@ -1,127 +1,89 @@
-ion-content {
-  --padding-bottom: 100px; // Platz für die untere Leiste
-}
-
-.image-container {
+.empty-state {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: 100%;
-  padding-bottom: 100px;
-  box-sizing: border-box;
+  height: 60vh;
+  text-align: center;
+  color: var(--ion-color-medium);
+
+  .empty-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+    opacity: 0.5;
+  }
 }
 
-.image-container > div {
+.scan-card {
   position: relative;
-  max-height: 70vh;
-  display: inline-block;
+  margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+
+  .thumbnail-img {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .delete-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    margin: 0;
+    --padding-start: 0;
+    --padding-end: 0;
+    --border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.8);
+    
+    ion-icon {
+      font-size: 24px;
+    }
+  }
 }
 
-.image-container img {
-  max-width: 100%;
-  max-height: 70vh;
-  object-fit: contain;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: transform 0.3s ease-in-out;
-  transform-origin: center;
-}
-
-.image-container img.clickable {
-  cursor: pointer;
-}
-
-.overlay-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  cursor: grab;
-}
-
-.bottom-button {
-  position: fixed;
-  bottom: 20px;
-  left: 0;
-  right: 0;
+.center-button-container {
   display: flex;
   justify-content: center;
-  padding: 0 16px;
-  z-index: 100;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
 
   ion-button {
-    width: 56px;
-    height: 56px;
-    --border-radius: 50%;
-    --background: var(--ion-color-primary);
-    --color: white !important;
-    font-size: 24px;
-  }
-
-  ion-icon {
-    color: white !important;
+    --border-radius: 12px;
+    width: 80%;
+    max-width: 400px;
   }
 }
 
-.edit-toolbar {
-  position: fixed;
-  bottom: 20px;
-  left: 0;
-  right: 0;
+.batch-toolbar {
   display: flex;
   justify-content: center;
-  padding: 0 16px;
-  z-index: 100;
+  padding: 10px;
+  background: var(--ion-color-light);
 
   ion-buttons {
     display: flex;
-    gap: 12px;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 500px;
+    align-items: center;
   }
 
-  ion-button {
-    width: 48px;
-    height: 48px;
-    --border-radius: 50%;
-    --background: var(--ion-color-primary);
-    --color: white !important;
-    font-size: 20px;
+  .footer-actions {
+    display: flex;
+    gap: 8px;
   }
 
-  ion-button[color="danger"] {
-    --background: var(--ion-color-danger);
-    --color: white !important;
-  }
-
-  ion-icon {
-    color: white !important;
-    font-size: 24px;
+  ion-label {
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: var(--ion-color-dark);
   }
 }
 
-
-.loading-indicator {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.6);
-  color: white;
-  padding: 20px;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  z-index: 5;
-
-  ion-spinner {
-    margin-bottom: 10px;
-    width: 30px;
-    height: 30px;
-  }
+.no-text-back-button {
+  --icon-font-size: 32px;
 }
-
-.no-text-back-button::part(text) {
-  display: none;
-}
-

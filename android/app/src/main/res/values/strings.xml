@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Media Utility</string>
+    <string name="title_activity_main">Media Utility</string>
+    <string name="package_name">de.cs4u.media_utility</string>
+    <string name="custom_url_scheme">de.cs4u.media_utility</string>
+</resources>

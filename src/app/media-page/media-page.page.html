@@ -1,92 +1,72 @@
-<app-fullscreen-overlay
-     *ngIf="currentState === PageState.Fullscreen"
-     [imageSrc]="capturedPhoto"
-     [belowHeader]="fullscreenBelowHeader"
-     [isClosing]="isClosingFullscreen"
-     (close)="closeFullscreen()">
-</app-fullscreen-overlay>
-
 <ion-header>
   <ion-toolbar color="primary">
     <ion-buttons slot="start">
       <ion-back-button defaultHref="/" class="no-text-back-button"></ion-back-button>
     </ion-buttons>
-    <ion-title>Dokumenten Scan</ion-title>
+    <ion-title>Dokumenten Scanner</ion-title>
   </ion-toolbar>
 </ion-header>
 
 <ion-content class="ion-padding" [fullscreen]="true">
 
-  <div #imageContainer class="image-container"
-       [class.adjusting]="currentState === PageState.ManualAdjust">
+  <!-- Fullscreen overlay for scanned items popup -->
+  <app-fullscreen-overlay
+       *ngIf="currentState === PageState.Fullscreen && fullscreenImage"
+       [imageSrc]="fullscreenImage"
+       [belowHeader]="fullscreenBelowHeader"
+       [isClosing]="isClosingFullscreen"
+       (close)="closeFullscreen()">
+  </app-fullscreen-overlay>
 
-    <div>
-    <img #photoDisplay *ngIf="capturedPhoto"
-         [src]="capturedPhoto" alt="Aufgenommenes Foto" id="photo"
-         [class.clickable]="currentState === PageState.Cropped"
-         (load)="updateOverlaySize()"
-         (click)="onImageClick()" /> <canvas #overlayCanvas class="overlay-canvas"
-                                                 *ngIf="currentState === PageState.ManualAdjust"
-                                                 (mousedown)="startDrag($event)"
-                                                 (touchstart)="startDrag($event)"
-                                                 (mousemove)="dragPoint($event)"
-                                                 (touchmove)="dragPoint($event)"
-                                                 (mouseup)="endDrag($event)"
-                                                 (touchend)="endDrag($event)"
-                                                 (mouseleave)="endDrag($event)"
-                                                 (touchcancel)="endDrag($event)"></canvas>
-    </div>
-    <div class="loading-indicator" *ngIf="currentState === PageState.Detecting">
-      <ion-spinner name="crescent"></ion-spinner>
-      <p>Erkenne Dokument...</p>
-    </div>
+  <!-- Empty state with trigger button -->
+  <div class="empty-state" *ngIf="currentState === PageState.NoPhotos">
+    <ion-icon name="document-text-outline" class="empty-icon"></ion-icon>
+    <h2>Keine Scans vorhanden</h2>
+    <p>Tippe auf den Dokumenten-Scanner, um fortzufahren.</p>
   </div>
 
+  <!-- Batch View with Grid of scanned images -->
+  <ion-grid *ngIf="currentState === PageState.PhotosScanned">
+    <ion-row>
+      <ion-col size="6" size-md="4" size-lg="3" *ngFor="let img of scannedImages; let i = index">
+        <ion-card class="scan-card">
+           <img [src]="img" alt="Scanned Page {{i + 1}}" (click)="openFullscreen(img)" class="thumbnail-img"/>
+           <ion-button fill="clear" color="danger" class="delete-btn" (click)="removeImage(i)">
+             <ion-icon slot="icon-only" name="close-circle"></ion-icon>
+           </ion-button>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
 
-  <canvas #processingCanvas hidden></canvas>
-
-  <div class="bottom-button" *ngIf="currentState === PageState.NoPhoto">
-    <ion-button expand="block" (click)="takePhoto()" shape="round" size="large" color="primary">
-      <ion-icon name="camera" slot="icon-only"></ion-icon>
+  <!-- Empty state scan button -->
+  <div class="bottom-button center-button-container" *ngIf="currentState === PageState.NoPhotos">
+    <ion-button expand="block" (click)="startDocumentScan()" shape="round" size="large" color="primary">
+      <ion-icon name="scan" slot="start"></ion-icon>
+      Scanner öffnen
     </ion-button>
   </div>
 
-  <div class="edit-toolbar" *ngIf="currentState === PageState.PhotoTaken || currentState === PageState.Cropped">
-    <ion-buttons>
-      <ion-button shape="round" (click)="resetFromPhoto()" color="warning" fill="solid" title="Anpassung zurücksetzen">
-        <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-      <ion-button shape="round" (click)="onSave()" color="success" fill="solid">
-        <ion-icon name="save-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-      <ion-button shape="round" (click)="deletePhoto()" color="danger" fill="solid">
-        <ion-icon name="trash-bin-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-    </ion-buttons>
-  </div>
-
-  <div class="edit-toolbar" *ngIf="currentState === PageState.ManualAdjust">
-    <ion-buttons>
-      <ion-button shape="round" (click)="cancelAdjust()" [disabled]="!hasUserAdjusted" color="warning" fill="solid" title="Anpassung zurücksetzen">
-        <ion-icon name="arrow-undo-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-
-      <ion-button shape="round" (click)="onRotate()" color="primary" fill="solid">
-        <ion-icon name="refresh" slot="icon-only"></ion-icon>
-      </ion-button>
-
-      <ion-button shape="round" (click)="applyPerspectiveTransform()" color="success" fill="solid" title="Zuschneiden bestätigen">
-        <ion-icon name="checkmark-done-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-
-      <ion-button shape="round" (click)="cancelAdjustmentMode()" color="primary" fill="solid" title="Ohne Zuschneiden verwenden">
-        <ion-icon name="checkmark-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-
-      <ion-button shape="round" (click)="deletePhoto()" color="danger" fill="solid">
-        <ion-icon name="trash-bin-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-    </ion-buttons>
-  </div>
-
 </ion-content>
+
+<!-- Edit Toolbar for Batched Documents -->
+<ion-footer *ngIf="currentState === PageState.PhotosScanned && !isClosingFullscreen">
+  <div class="edit-toolbar batch-toolbar">
+    <ion-buttons>
+      <ion-button (click)="deleteAllPhotos()" color="danger" fill="clear" title="Alle Scans verwerfen">
+        <ion-icon name="trash-bin-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-label>{{ scannedImages.length }} Seite(n)</ion-label>
+      <div class="footer-actions">
+        <ion-button (click)="startDocumentScan()" color="primary" fill="outline" shape="round">
+          <ion-icon name="scan" slot="start"></ion-icon>
+          Weiter
+        </ion-button>
+        <ion-button (click)="onSave()" color="success" fill="solid" shape="round">
+          <ion-icon name="checkmark-done-outline" slot="start"></ion-icon>
+          Beenden
+        </ion-button>
+      </div>
+    </ion-buttons>
+  </div>
+</ion-footer>
