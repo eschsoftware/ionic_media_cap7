@@ -38,52 +38,22 @@
     width: 30px;
     height: 30px;
     background: rgba(255, 255, 255, 0.8);
-    
+
     ion-icon {
       font-size: 24px;
     }
   }
 }
 
-.center-button-container {
-  display: flex;
-  justify-content: center;
-  margin-top: 2rem;
-  margin-bottom: 2rem;
-
-  ion-button {
-    --border-radius: 12px;
-    width: 80%;
-    max-width: 400px;
-  }
-}
-
 .batch-toolbar {
   display: flex;
   justify-content: center;
-  padding: 10px;
+  padding: 16px;
   background: var(--ion-color-light);
 
-  ion-buttons {
-    display: flex;
-    justify-content: space-between;
+  ion-button {
     width: 100%;
-    max-width: 500px;
-    align-items: center;
+    max-width: 400px;
+    margin: 0;
   }
-
-  .footer-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  ion-label {
-    font-weight: bold;
-    font-size: 1.1rem;
-    color: var(--ion-color-dark);
-  }
-}
-
-.no-text-back-button {
-  --icon-font-size: 32px;
 }

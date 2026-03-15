@@ -1,8 +1,5 @@
 <ion-header>
   <ion-toolbar color="primary">
-    <ion-buttons slot="start">
-      <ion-back-button defaultHref="/" class="no-text-back-button"></ion-back-button>
-    </ion-buttons>
     <ion-title>Dokumenten Scanner</ion-title>
   </ion-toolbar>
 </ion-header>
@@ -10,12 +7,8 @@
 <ion-content class="ion-padding" [fullscreen]="true">
 
   <!-- Fullscreen overlay for scanned items popup -->
-  <app-fullscreen-overlay
-       *ngIf="currentState === PageState.Fullscreen && fullscreenImage"
-       [imageSrc]="fullscreenImage"
-       [belowHeader]="fullscreenBelowHeader"
-       [isClosing]="isClosingFullscreen"
-       (close)="closeFullscreen()">
+  <app-fullscreen-overlay *ngIf="currentState === PageState.Fullscreen && fullscreenImage" [imageSrc]="fullscreenImage"
+    [belowHeader]="fullscreenBelowHeader" [isClosing]="isClosingFullscreen" (close)="closeFullscreen()">
   </app-fullscreen-overlay>
 
   <!-- Empty state with trigger button -->
@@ -30,43 +23,23 @@
     <ion-row>
       <ion-col size="6" size-md="4" size-lg="3" *ngFor="let img of scannedImages; let i = index">
         <ion-card class="scan-card">
-           <img [src]="img" alt="Scanned Page {{i + 1}}" (click)="openFullscreen(img)" class="thumbnail-img"/>
-           <ion-button fill="clear" color="danger" class="delete-btn" (click)="removeImage(i)">
-             <ion-icon slot="icon-only" name="close-circle"></ion-icon>
-           </ion-button>
+          <img [src]="img" alt="Scanned Page {{i + 1}}" (click)="openFullscreen(img)" class="thumbnail-img" />
+          <ion-button fill="clear" color="danger" class="delete-btn" (click)="removeImage(i)">
+            <ion-icon slot="icon-only" name="close-circle"></ion-icon>
+          </ion-button>
         </ion-card>
       </ion-col>
     </ion-row>
   </ion-grid>
 
-  <!-- Empty state scan button -->
-  <div class="bottom-button center-button-container" *ngIf="currentState === PageState.NoPhotos">
+</ion-content>
+
+<!-- Scanner Button -->
+<ion-footer>
+  <div class="edit-toolbar batch-toolbar">
     <ion-button expand="block" (click)="startDocumentScan()" shape="round" size="large" color="primary">
       <ion-icon name="scan" slot="start"></ion-icon>
       Scanner öffnen
     </ion-button>
-  </div>
-
-</ion-content>
-
-<!-- Edit Toolbar for Batched Documents -->
-<ion-footer *ngIf="currentState === PageState.PhotosScanned && !isClosingFullscreen">
-  <div class="edit-toolbar batch-toolbar">
-    <ion-buttons>
-      <ion-button (click)="deleteAllPhotos()" color="danger" fill="clear" title="Alle Scans verwerfen">
-        <ion-icon name="trash-bin-outline" slot="icon-only"></ion-icon>
-      </ion-button>
-      <ion-label>{{ scannedImages.length }} Seite(n)</ion-label>
-      <div class="footer-actions">
-        <ion-button (click)="startDocumentScan()" color="primary" fill="outline" shape="round">
-          <ion-icon name="scan" slot="start"></ion-icon>
-          Weiter
-        </ion-button>
-        <ion-button (click)="onSave()" color="success" fill="solid" shape="round">
-          <ion-icon name="checkmark-done-outline" slot="start"></ion-icon>
-          Beenden
-        </ion-button>
-      </div>
-    </ion-buttons>
   </div>
 </ion-footer>

@@ -16,15 +16,15 @@ enum PageState {
 export class MediaPagePage implements OnInit {
   public PageState = PageState;
   public currentState: PageState = PageState.NoPhotos;
-  
+
   // Array based state management for Multi-Scan Workflow
   public scannedImages: string[] = [];
-  
+
   public fullscreenImage: string | null = null;
   public fullscreenBelowHeader: boolean = true;
   public isClosingFullscreen: boolean = false;
 
-  constructor(private cdRef: ChangeDetectorRef) {}
+  constructor(private cdRef: ChangeDetectorRef) { }
 
   ngOnInit() {
     // Initialization no longer requires waiting for OpenCV
@@ -40,8 +40,8 @@ export class MediaPagePage implements OnInit {
       }
 
       const { scannedImages } = await MlKitDocumentScanner.scanDocument({
-         letUserAdjustCrop: true,
-         maxNumDocuments: 24, // Allow batch scanning
+        letUserAdjustCrop: true,
+        maxNumDocuments: 24, // Allow batch scanning
       });
 
       if (scannedImages && scannedImages.length > 0) {
@@ -65,21 +65,6 @@ export class MediaPagePage implements OnInit {
     if (this.scannedImages.length === 0) {
       this.currentState = PageState.NoPhotos;
     }
-    this.cdRef.detectChanges();
-  }
-
-  public onSave() {
-    if (this.scannedImages.length > 0) {
-      alert(`${this.scannedImages.length} Bild(er) gespeichert (simuliert).`);
-      // Here you would typically send the base64 array to your backend or state store
-    } else {
-      alert("Warnung: Keine Bilder zum Speichern vorhanden.");
-    }
-  }
-
-  public deleteAllPhotos() {
-    this.scannedImages = [];
-    this.currentState = PageState.NoPhotos;
     this.cdRef.detectChanges();
   }
 
