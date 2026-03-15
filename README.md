@@ -11,8 +11,9 @@ Der Scanner nutzt auf beiden Plattformen native Frameworks, um eine optimale Per
 
 ## Projektstruktur für den Scanner
 Die relevanten Dateien für die Scan-Funktionalität sind:
-- **iOS Implementation**: `ios-plugin-src/MlKitDocumentScannerPlugin.swift`
-- **Android Implementation**: `android/app/src/main/java/de/cs4u/media_utility/MlKitDocumentScannerPlugin.java`
+- **iOS Plugin**: `ios-plugin-src/MlKitDocumentScannerPlugin.swift`
+- **iOS Plugin-Registrierung**: `ios/App/App/MainViewController.swift` *(ohne diese Datei funktioniert das Plugin nicht)*
+- **Android Plugin**: `android/app/src/main/java/de/cs4u/media_utility/MlKitDocumentScannerPlugin.java`
 - **TypeScript Interface**: `src/plugins/mlkit-document-scanner.ts`
 
 ---
@@ -25,13 +26,41 @@ Um die Scan-Funktionalität in ein bestehendes Capacitor-Projekt zu übertragen,
 Kopieren Sie die Datei `src/plugins/mlkit-document-scanner.ts` in Ihr Projekt (z.B. nach `src/app/plugins/`). Diese Datei definiert das Interface und registriert das Plugin bei Capacitor.
 
 ### 2. iOS Integration
-1. **Datei kopieren**: Kopieren Sie `ios-plugin-src/MlKitDocumentScannerPlugin.swift` in Ihr Xcode-Projekt unter `ios/App/App/`.
-2. **Berechtigungen**: Fügen Sie in der `Info.plist` (`ios/App/App/Info.plist`) den Kamerazugriff hinzu:
+1. **Plugin-Datei kopieren**: Kopieren Sie `ios-plugin-src/MlKitDocumentScannerPlugin.swift` in Ihr Xcode-Projekt unter `ios/App/App/`.
+
+2. **Plugin explizit registrieren** *(kritisch — ohne diesen Schritt bleibt das Plugin unregistriert)*:
+   Capacitor's `registerPlugins()` lädt Plugins ausschließlich aus npm-Packages. Eingebettete Plugins (ohne npm-Package) müssen manuell registriert werden.
+
+   Erstellen Sie `ios/App/App/MainViewController.swift`:
+   ```swift
+   import UIKit
+   import Capacitor
+
+   class MainViewController: CAPBridgeViewController {
+       override open func capacitorDidLoad() {
+           bridge?.registerPluginInstance(MlKitDocumentScannerPlugin())
+       }
+   }
+   ```
+
+   Passen Sie `ios/App/App/Base.lproj/Main.storyboard` an — ersetzen Sie den `viewController`-Eintrag:
+   ```xml
+   <!-- Vorher -->
+   <viewController id="BYZ-38-t0r" customClass="CAPBridgeViewController" customModule="Capacitor" sceneMemberID="viewController"/>
+
+   <!-- Nachher -->
+   <viewController id="BYZ-38-t0r" customClass="MainViewController" customModuleProvider="target" sceneMemberID="viewController"/>
+   ```
+
+   Fügen Sie beide Dateien in Xcode dem Target hinzu (File → Add Files to "App"), damit sie in `project.pbxproj` eingetragen werden.
+
+3. **Berechtigungen**: Fügen Sie in der `Info.plist` (`ios/App/App/Info.plist`) den Kamerazugriff hinzu:
    ```xml
    <key>NSCameraUsageDescription</key>
    <string>Wird für den Dokumentenscanner benötigt</string>
    ```
-3. **Frameworks**: Stellen Sie sicher, dass `VisionKit` im Projekt verfügbar ist (Standard ab iOS 13).
+
+4. **Frameworks**: Stellen Sie sicher, dass `VisionKit` im Projekt verfügbar ist (Standard ab iOS 13).
 
 ### 3. Android Integration
 1. **Datei kopieren**: Kopieren Sie `android/app/src/main/java/de/cs4u/media_utility/MlKitDocumentScannerPlugin.java` in Ihr Android-Projekt. 
